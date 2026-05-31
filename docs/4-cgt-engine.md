@@ -1,32 +1,35 @@
 # CGT Engine
 
-The numerical core. HMRC rules are law — implement them exactly. Section 104 pool operations live inside the engine (no separate pool module).
+The numerical core — HMRC rules are law, implement them exactly. The Section 104 pool lives inside the engine (no separate module).
+
+Each disposal's gain is **`proceeds − allowable cost`**. The whole job is deciding *which acquisition's cost* a sale draws on — HMRC fixes the order — then averaging whatever's left into a running pool. Everything is computed in GBP with `Decimal`.
+
+## Pipeline
+1. **Convert** every trade to GBP at its trade-date rate.
+2. **Group** trades by asset (`symbol|currency`), oldest first.
+3. **Match** each sale to acquisitions in the fixed order below; emit a gain/loss per matched lot.
+4. **Filter** the output to the period — a disposal appears iff `start <= disposal_date <= end` (inclusive).
+
+The pool is built from **all** trades (a lifetime running average); only the *output* is period-filtered. So bed & breakfast may legitimately match an acquisition in a later tax year.
 
 ## Asset identity
-Key = `symbol|currency` (e.g. `AAPL|USD`). One Section 104 pool + one short pool per key. Group all trades by key, sort ascending by date, process per asset.
+Key = `symbol|currency` (e.g. `AAPL|USD`) — one Section 104 pool and one short pool per key.
 
-## Period handling
-Pool is built from **all** trades (lifetime running average). Only the **output** is filtered: a disposal appears iff `start <= disposal_date <= end` (inclusive). B&B may legitimately match an acquisition in a later tax year.
-
-## Matching order (disposals)
-For each sell, `remaining = abs(qty)`. Apply in this fixed order; each step only if `remaining > 0`:
+## Matching a disposal
+For each sell, `remaining = abs(qty)`. Walk this fixed order, each step only while `remaining > 0`:
 
 1. **Same-day** — acquisitions on the same date.
-2. **30-day bed & breakfast** — acquisitions in `[date+1 .. date+30]` (inclusive), earliest first.
-3. **Section 104 pool** — at pool average cost; `match = min(remaining, pool.qty)`.
-4. **Excess → open short** — whatever remains opens a short position.
+2. **Bed & breakfast (30-day)** — acquisitions in `[date+1 .. date+30]` (inclusive), earliest first.
+3. **Section 104 pool** — at average cost; `match = min(remaining, pool.qty)`.
+4. **Excess** — whatever remains opens a short position.
 
-Same-day and B&B-matched acquisitions are consumed **before they ever enter the pool**.
+Same-day and B&B matches are consumed **before they ever enter the pool**.
 
-## How B&B look-ahead works
-Pre-create an acquisition "slot" for every buy up front (`remaining_qty`, `eligible_after = buy.date + 30d`). A slot enters the Section 104 pool only when **flushed** — at the start of a later trade whose date `>= eligible_after`, or at end-of-asset. Therefore:
-- A buy is poolable for a disposal only if `disposal.date >= buy.date + 30`.
-- Same-day / in-window buys are matched while still in their slot and never reach the pool.
+### How the 30-day look-ahead works
+Give every buy a "slot" up front (`remaining_qty`, `eligible_after = buy.date + 30d`). A slot enters the pool only when **flushed** — at the start of a later trade dated `>= eligible_after`, or at end-of-asset. So a buy is poolable for a disposal only if `disposal.date >= buy.date + 30`; same-day and in-window buys are matched straight from their slot and never reach the pool.
 
-## Acquisitions (buys) — close shorts first
-On a buy: if shorts are outstanding, cover them first, and subtract the covered qty from **this buy's slot** so it can't also enter the long pool. The remainder stays in its slot → enters the pool later via flush.
-
-Short-close matching (reverse order): (1) same-day short-opens, then (2) short pool at average proceeds. *(See Decisions for the optional 30-day reverse-B&B step.)*
+### Buys close shorts first
+On a buy, cover any outstanding shorts before anything else, and subtract the covered qty from **this buy's slot** so it can't also enter the long pool. The remainder stays in the slot and pools later via flush. Short closes match in reverse: (1) same-day short-opens, then (2) short pool at average proceeds. *(See Decisions for the optional reverse 30-day step.)*
 
 ## Formulas (GBP, Decimal)
 Per disposal lot of qty `q` from sell `D` (`proportion = q / abs(D.qty)`):
@@ -55,7 +58,7 @@ remove: cost_removed = (avg_cost * q).quantize(0.01, HALF_UP)
         quantity -= q;  total_cost_gbp -= cost_removed
         if quantity == 0: total_cost_gbp = 0    # dust guard
 ```
-Short pool is symmetric on `total_proceeds_gbp` / `avg_proceeds` (add on short-open, remove on short-close).
+The short pool is symmetric on `total_proceeds_gbp` / `avg_proceeds` (add on short-open, remove on short-close).
 
 ## Decimal invariants
 - `Decimal` everywhere; never float.
@@ -82,7 +85,7 @@ Short pool is symmetric on `total_proceeds_gbp` / `avg_proceeds` (add on short-o
 | Currencies (11) | AUD CAD CHF DKK EUR HKD JPY NOK PLN SEK USD |
 | Cache | static `backend/data/fx_rates.csv`, cols `date,AUD,…,USD`, from 2015-04-06 |
 
-Ship the rate CSV static; load once and look up. No runtime network fetch — see [architecture.md](architecture.md).
+Ship the rate CSV static; load once and look up. No runtime network fetch — see [2-architecture.md](2-architecture.md).
 
 ## History-gap validation
 Run after pools are built, before download. For each IBKR Open Position, compare to its pool (key `symbol|currency`):
