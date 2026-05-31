@@ -59,5 +59,5 @@ tax-buddy/
 4. `engine.py` — HMRC matching + Section 104 pool; highest risk; test incrementally: pool → same-day → B&B → shorts.
 5. `validator.py` — history-gap check.
 6. `excel.py` — workbook generation (lean styling).
-7. `main.py` — wire the `/calculate` pipeline + `/health`; invoke the FX top-up at startup.
+7. `main.py` — wire the `/calculate` pipeline + `/health`; invoke the FX top-up at startup. Pass the period as a structured value (`is_tax_year` + dates), not by parsing `period_label` for `/`.
 8. frontend — Vite scaffold, `api.ts`, single-screen `App.tsx`, proxy.

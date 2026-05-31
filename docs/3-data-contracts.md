@@ -3,7 +3,7 @@
 ## Input — IBKR CSV Activity Statement
 Tagged-row CSV: every row is `section, rowtype, payload…`. Many sections in one file. Rows with < 2 cols or blank section/rowtype are skipped.
 
-**File checks:** max 20 MB; reject empty. Decode utf-8, then latin-1. Separator `;` only if line 1 has `;` and no `,`, else `,`.
+**File checks:** max 20 MB (enforce at the upload boundary, before buffering); reject empty. Decode utf-8, then latin-1. Separator `;` only if line 1 has `;` and no `,`, else `,`.
 
 **Trades section** — required: a `Trades` section with a `Header` row + ≥1 `Data` row. Columns accessed by name; payload starts at col index 2.
 Required columns (all): `DataDiscriminator, Asset Category, Currency, Symbol, Description, Date/Time, Quantity, T. Price, Comm/Fee, Proceeds, Basis, Realized P/L, Code, Open/Close` — plus at least one of `{ISIN, ConId}`.
@@ -46,8 +46,3 @@ Filename: `TaxBuddy_CGT_2024-25.xlsx` when `period_label` has `/` and len ≤ 7;
 
 ## Errors (HTTP 400, body `{error, message}`)
 `INVALID_DATES` (non-ISO or start ≥ end) · `INVALID_FILE_TYPE` (not .csv / empty) · `FILE_TOO_LARGE` (> 20 MB) · `INVALID_ENCODING` · `NOT_IBKR_FORMAT` · `MISSING_TRADES_SECTION` · `EMPTY_TRADES` · `MISSING_REQUIRED_COLUMNS` (lists the missing ones). Any other → 500.
-
-## Implementation notes
-- History gaps: rendered in the Data Quality tab; the `X-TaxBuddy-HistoryGaps` header carries the full array (not just a count).
-- Period: pass as a structured value (`is_tax_year` + dates), not by parsing the label string for `/`.
-- File size: enforce the 20 MB limit at the upload boundary, before buffering the whole file.
