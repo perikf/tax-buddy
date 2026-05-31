@@ -21,13 +21,6 @@ IBKR reports gains FIFO (US rules) — non-compliant with UK law. By hand it's 4
 ## Out of scope (first version)
 Dividends/income, crypto, CFDs/spread betting, corporate actions (skip + warn), HMRC submission, multi-broker, accounts/auth/persistence, mobile UI, PDF.
 
-## Non-negotiable principles
-- **Stateless.** CSV in memory per request; no DB, no auth.
-- **Decimal everywhere.** Never float for money.
-- **Pool from all trades.** Section 104 is a lifetime running average — period-agnostic; only output is filtered.
-- **Warn, don't block.** Data-quality issues surface to the user; they choose to continue.
-- **Simple & lean.** See [architecture.md](architecture.md).
-
 ## Success criteria
 | Metric | Target |
 |---|---|

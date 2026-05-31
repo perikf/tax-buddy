@@ -27,9 +27,8 @@ frontend: gaps? → warning screen (continue / re-upload) : results → download
 ## Target structure
 ```
 tax-buddy/
-├── run.sh
+├── run.sh                    # dev launcher: uvicorn :8000 + Vite :5173 together
 ├── pyproject.toml            # pinned deps
-├── fx_rates.py               # FX extractor (Frankfurter/ECB) → backend/data/fx_rates.csv
 ├── backend/
 │   ├── main.py               # HTTP routing + /calculate orchestration only
 │   ├── models.py             # dataclasses + exceptions
@@ -39,6 +38,7 @@ tax-buddy/
 │   ├── excel.py              # generate_excel (lean styling)
 │   ├── validator.py          # history-gap check (or fold into engine.py)
 │   ├── data/fx_rates.csv     # shipped, read-only
+│   ├── scripts/fx_rates.py   # offline FX extractor (Frankfurter/ECB) → backend/data/fx_rates.csv
 │   └── tests/
 └── frontend/src/
     ├── main.tsx
@@ -48,16 +48,16 @@ tax-buddy/
 ```
 
 ## Keep it lean
-- **FX rates load from a static CSV at import — no runtime network calls.** Refresh the CSV offline by running `fx_rates.py`.
+- **FX rates load from a static CSV at import — no runtime network calls.** Refresh the CSV offline by running `backend/scripts/fx_rates.py`.
 - **Section 104 pool operations live inside `engine.py`** — no separate pool module.
 - **FX→GBP conversion lives in `fx.py`**; `main.py` is HTTP routing + pipeline orchestration only.
 - **`excel.py`:** build the required tabs, columns, and totals; keep styling minimal — one small shared helper, no decoration.
 - **Frontend:** one screen in `App.tsx` with the `upload → processing → warning? → results / error` state machine. Extract components only when reuse appears.
-- **CORS** is only needed for cross-origin deployment; dev uses the Vite proxy and single-server prod is same-origin.
+
 
 ## Build order
 1. `models.py` — dataclasses + exceptions (everything imports these).
-2. `fx.py` — load the rate CSV and look up rates. A populated CSV already exists at `data/fx_rates.csv`; copy it to `backend/data/`, or regenerate it with `fx_rates.py`.
+2. `fx.py` — load the rate CSV and look up rates. A populated CSV already exists at `data/fx_rates.csv`; copy it to `backend/data/`, or regenerate it with `backend/scripts/fx_rates.py`.
 3. `parser.py` (parallel with 2).
 4. `engine.py` — HMRC matching + Section 104 pool; highest risk; test incrementally: pool → same-day → B&B → shorts.
 5. `validator.py` — history-gap check.
