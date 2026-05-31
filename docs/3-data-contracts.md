@@ -48,7 +48,6 @@ Filename: `TaxBuddy_CGT_2024-25.xlsx` when `period_label` has `/` and len ≤ 7;
 `INVALID_DATES` (non-ISO or start ≥ end) · `INVALID_FILE_TYPE` (not .csv / empty) · `FILE_TOO_LARGE` (> 20 MB) · `INVALID_ENCODING` · `NOT_IBKR_FORMAT` · `MISSING_TRADES_SECTION` · `EMPTY_TRADES` · `MISSING_REQUIRED_COLUMNS` (lists the missing ones). Any other → 500.
 
 ## Implementation notes
-- Warnings tab: Severity + Message (2 columns).
-- History gaps: render in the Data Quality tab; the response header carries only a count.
+- History gaps: rendered in the Data Quality tab; the `X-TaxBuddy-HistoryGaps` header carries the full array (not just a count).
 - Period: pass as a structured value (`is_tax_year` + dates), not by parsing the label string for `/`.
 - File size: enforce the 20 MB limit at the upload boundary, before buffering the whole file.

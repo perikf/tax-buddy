@@ -7,7 +7,7 @@ A stateless web app that turns an IBKR CSV Activity Statement into a downloadabl
 UK retail investors / active traders self-filing Self Assessment, holding stocks/ETFs/options (mostly US-listed) via Interactive Brokers.
 
 ## Why
-IBKR reports gains FIFO (US rules) — non-compliant with UK law. By hand it's 4–8 hrs; an accountant is £300–800. Target: correct, auditable CGT in **under 60s**.
+IBKR reports gains FIFO (US rules) — non-compliant with UK law. By hand it's 4–8 hrs; an accountant is £300–800. Target: correct, auditable CGT in **under 10s**.
 
 ## In scope
 - Parse IBKR multi-section CSV, no user pre-processing.

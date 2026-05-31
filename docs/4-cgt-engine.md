@@ -83,9 +83,9 @@ The short pool is symmetric on `total_proceeds_gbp` / `avg_proceeds` (add on sho
 | Weekend/holiday | step **back** up to 7 calendar days; first hit wins; record the actual rate date |
 | No rate in window | skip that trade's GBP conversion + warn (trade still kept) |
 | Currencies (11) | AUD CAD CHF DKK EUR HKD JPY NOK PLN SEK USD |
-| Cache | static `backend/data/fx_rates.csv`, cols `date,AUD,…,USD`, from 2015-04-06 |
+| Cache | `backend/data/fx_rates.csv` (shipped, topped up at startup), cols `date,AUD,…,USD`, from 2015-04-06 |
 
-Ship the rate CSV static; load once and look up. No runtime network fetch — see [2-architecture.md](2-architecture.md).
+Load the CSV into memory at startup and look up; a best-effort startup top-up fills missing recent business days (network only at startup, never per request) — see [2-architecture.md](2-architecture.md).
 
 ## History-gap validation
 Run after pools are built, before download. For each IBKR Open Position, compare to its pool (key `symbol|currency`):
@@ -98,6 +98,5 @@ Surface gaps to the UI before download; user can re-upload or continue. **Never 
 
 ## Decisions to make (resolve before building)
 - **Short-side 30-day B&B:** HMRC symmetry suggests applying the 30-day rule to short closes too. Decide whether to implement it, or match short closes with same-day + short-pool only.
-- **Asset key:** use `symbol|currency` (handles the same ticker held in two currencies); make the validator use the same key.
 - **Options exercise/assignment:** not yet handled — options are treated as generic open/close. Implement only if you have sample CSVs to test against.
 - **No `B&B Removal` pool event:** B&B-matched acquisitions never enter the pool, so there is nothing to emit — do not add such an event.

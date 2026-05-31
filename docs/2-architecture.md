@@ -33,12 +33,12 @@ tax-buddy/
 │   ├── main.py               # HTTP routing + /calculate orchestration only
 │   ├── models.py             # dataclasses + exceptions
 │   ├── parser.py             # parse_ibkr_csv
-│   ├── fx.py                 # load static CSV + get_rate + convert_to_gbp (no network)
+│   ├── fx.py                 # load CSV + get_rate + convert_to_gbp (no per-request network)
 │   ├── engine.py             # HMRC matching + Section 104 pool
 │   ├── excel.py              # generate_excel (lean styling)
 │   ├── validator.py          # history-gap check (or fold into engine.py)
-│   ├── data/fx_rates.csv     # shipped, read-only
-│   ├── scripts/fx_rates.py   # offline FX extractor (Frankfurter/ECB) → backend/data/fx_rates.csv
+│   ├── data/fx_rates.csv     # shipped cache; topped up at startup
+│   ├── scripts/fx_rates.py   # full-history FX rebuild (Frankfurter/ECB) → backend/data/fx_rates.csv
 │   └── tests/
 └── frontend/src/
     ├── main.tsx
@@ -48,20 +48,16 @@ tax-buddy/
 ```
 
 ## Keep it lean
-- **FX rates load from a static CSV at import — no runtime network calls.** Refresh the CSV offline by running `backend/scripts/fx_rates.py`.
-- **Section 104 pool operations live inside `engine.py`** — no separate pool module.
-- **FX→GBP conversion lives in `fx.py`**; `main.py` is HTTP routing + pipeline orchestration only.
+- **FX rates load from `backend/data/fx_rates.csv` into memory at startup; a best-effort top-up then fetches any missing business days (up to the latest published ECB rate) into the table, persisting to the CSV when writable.** On network error, warn and run with the cached table. The request path stays pure — `get_rate`/`convert_to_gbp` read the in-memory table only, never the network. `backend/scripts/fx_rates.py` shares the same fetch for a full-history rebuild.
 - **`excel.py`:** build the required tabs, columns, and totals; keep styling minimal — one small shared helper, no decoration.
 - **Frontend:** one screen in `App.tsx` with the `upload → processing → warning? → results / error` state machine. Extract components only when reuse appears.
 
-
 ## Build order
 1. `models.py` — dataclasses + exceptions (everything imports these).
-2. `fx.py` — load the rate CSV and look up rates. A populated CSV already exists at `data/fx_rates.csv`; copy it to `backend/data/`, or regenerate it with `backend/scripts/fx_rates.py`.
+2. `fx.py` — load the rate CSV, look up rates, and expose a best-effort top-up (fetch missing recent business days; warn + continue on failure). A populated CSV already exists at `data/fx_rates.csv`; copy it to `backend/data/`, or rebuild it with `backend/scripts/fx_rates.py`.
 3. `parser.py` (parallel with 2).
 4. `engine.py` — HMRC matching + Section 104 pool; highest risk; test incrementally: pool → same-day → B&B → shorts.
 5. `validator.py` — history-gap check.
 6. `excel.py` — workbook generation (lean styling).
-7. `main.py` — wire the `/calculate` pipeline + `/health`.
+7. `main.py` — wire the `/calculate` pipeline + `/health`; invoke the FX top-up at startup.
 8. frontend — Vite scaffold, `api.ts`, single-screen `App.tsx`, proxy.
-9. integration — end-to-end against a real IBKR fixture; optional single-server dist serving.
