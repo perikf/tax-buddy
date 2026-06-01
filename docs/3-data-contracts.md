@@ -6,35 +6,39 @@ Tagged-row CSV: every row is `section, rowtype, payload…`. Many sections in on
 **File checks:** max 20 MB (enforce at the upload boundary, before buffering); reject empty. Decode utf-8, then latin-1. Separator `;` only if line 1 has `;` and no `,`, else `,`.
 
 **Trades section** — required: a `Trades` section with a `Header` row + ≥1 `Data` row. Columns accessed by name; payload starts at col index 2.
-Required columns (all): `DataDiscriminator, Asset Category, Currency, Symbol, Description, Date/Time, Quantity, T. Price, Comm/Fee, Proceeds, Basis, Realized P/L, Code, Open/Close` — plus at least one of `{ISIN, ConId}`.
+Required columns (all): `DataDiscriminator, Asset Category, Currency, Symbol, Date/Time, Quantity, T. Price, C. Price, Proceeds, Comm/Fee, Basis, Realized P/L, Realized P/L %, MTM P/L, Code`.
 
 Only rows with `DataDiscriminator == "Order"` become trades (SubTotal / Total / ClosedLot ignored).
-| Field | Rule |
-|---|---|
-| Date/Time | `%Y-%m-%d, %H:%M:%S`, fallback date-only; else skip row + warn |
-| Quantity | Decimal (strip `,`); > 0 Buy, < 0 Sell; invalid → skip |
-| T. Price | Decimal; invalid → skip |
-| Currency | must be supported (12) else skip + warn |
-| Asset Category | must be supported (6) else skip + warn |
-| Comm/Fee, Proceeds, Realized P/L | Decimal; blank/invalid → 0 (keep row) |
+| Field | Description | Rule |
+|---|---|---|
+| Asset Category | Instrument type | must be supported (1) else skip + warn |
+| Currency | Trade currency | must be supported (12) else skip + warn |
+| Symbol | Ticker / identifier | non-empty string; blank → skip + warn |
+| Date/Time | Execution timestamp | `%Y-%m-%d, %H:%M:%S`, fallback date-only; else skip row + warn |
+| Quantity | Units traded | Decimal (strip `,`); > 0 Buy, < 0 Sell; invalid → skip + warn |
+| T. Price | Execution price per unit | Decimal (strip `,`); invalid → skip + warn |
+| C. Price | Closing / settlement price | Decimal (strip `,`); invalid → skip + warn |
+| Proceeds | Net cash from trade | Decimal (strip `,`); invalid → skip + warn |
+| Comm/Fee | Commission and fees | Decimal (strip `,`); invalid → skip + warn |
+| Basis | Cost basis of the position | Decimal (strip `,`); invalid → skip + warn |
+| Realized P/L | Realized profit / loss | Decimal (strip `,`); invalid → skip + warn |
+| Realized P/L % | Realized P/L as a percentage | Decimal (strip `,`); invalid → skip + warn |
+| MTM P/L | Mark-to-market P/L | Decimal (strip `,`); invalid → skip + warn |
+| Code | Semicolon-separated trade flags | blank → `""` (keep row) |
 
-Supported currencies (12): AUD CAD CHF DKK EUR GBP HKD JPY NOK PLN SEK USD.
-Supported asset categories (6): Stocks, Equity and Index Options, Futures, Options on Futures, Bonds, US Treasury Bills.
-
-**Open Positions** (optional): section `Open Positions`, rows `DataDiscriminator == "Summary"`, cols `{Symbol, Asset Category, Currency, Quantity}`. Missing → warn + skip the history check. Feeds validation.
+Supported currencies (12): AUD CAD CHF DKK EUR GBP HKD JPY NOK PLN SEK USD
+Supported asset categories (1): Stocks
 
 ## Output — Excel workbook
 Tabs in order (conditional ones only when data exists):
 | # | Sheet | When | Contents |
 |---|---|---|---|
-| 0 | Data Quality Warning | gaps exist | Asset, Product, Pool Qty, IBKR Held Qty, Gap, First-Trade-is-Sell |
-| 1..6 | `<n> <PRODUCT>` (e.g. `1 STOCKS`) | per product with in-period disposals | trade table (20 cols); grouped by `symbol\|isin_conid`; Gain/Loss on the group's last row; summary box on the first product sheet |
-| N | Pool History | always | Date, Asset, Product, Event, Qty Δ, Cost Δ GBP, Pool Qty, Pool Cost, Avg Cost/Unit |
-| N+1 | CGT Summary | always | period info; per-product gains/losses/net + TOTAL; SA108 figures |
-| N+2 | FX Detail | always | Trade Date, Asset, Type, Currency, Orig Amount, Rate, Rate Date, GBP Amount, Note |
-| N+3 | Warnings | warnings exist | Severity, Message |
+| 0 | CGT Summary | always | period info; per-product gains/losses/net + TOTAL; SA108 figures |
+| 1 | `1 STOCKS` | disposals exist | trade table (20 cols); grouped by `symbol\|isin_conid`; Gain/Loss on the group's last row; summary box |
+| 2 | Pool History | always | Date, Asset, Product, Event, Qty Δ, Cost Δ GBP, Pool Qty, Pool Cost, Avg Cost/Unit |
+| 3 | FX Detail | always | Trade Date, Asset, Type, Currency, Orig Amount, Rate, Rate Date, GBP Amount, Note |
+| 4 | Data Quality Warning | gaps exist | Asset, Product, Pool Qty, IBKR Held Qty, Gap, First-Trade-is-Sell |
 
-Product order: Stocks 1, Equity and Index Options 2, Futures 3, Options on Futures 4, Bonds 5, US Treasury Bills 6.
 Number formats: GBP `£#,##0.00`; date `DD-MMM-YYYY`; rate `#,##0.000000`.
 Filename: `TaxBuddy_CGT_2024-25.xlsx` when `period_label` has `/` and len ≤ 7; else `TaxBuddy_CGT_<start>_to_<end>.xlsx`.
 

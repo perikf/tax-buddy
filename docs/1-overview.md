@@ -15,11 +15,12 @@ IBKR reports gains FIFO (US rules) — non-compliant with UK law. By hand it's 4
 - Pool built from **full history across all tax years**; output filtered to the chosen period.
 - Reporting period: UK tax year (2015/16+) or custom range — both resolve to one `(start, end)` pair.
 - Incomplete-history detection (pool qty vs IBKR open positions); warn, never block.
+- Asset categories supported: Stocks
 - Multi-currency → GBP at trade-date ECB rate.
 - Excel: disposals per product, pool history, CGT summary (SA108), FX detail.
 
 ## Out of scope (first version)
-Dividends/income, crypto, CFDs/spread betting, corporate actions (skip + warn), HMRC submission, multi-broker, accounts/auth/persistence, mobile UI, PDF.
+Dividends/income, Equity and Index Options, Futures, Options on Futures, Bonds, US Treasury Bills, crypto, CFDs/spread betting, corporate actions (skip + warn), HMRC submission, multi-broker, accounts/auth/persistence, mobile UI, PDF.
 
 ## Success criteria
 | Metric | Target |
