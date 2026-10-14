@@ -16,4 +16,4 @@ dist/
 .claude/settings.local.json
 
 # Data
-data/
+/data/

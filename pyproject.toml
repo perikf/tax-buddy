@@ -1,0 +1,18 @@
+[project]
+name = "tax-buddy"
+version = "0.1.0"
+description = "UK Capital Gains Tax reports from IBKR activity statements"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.143.0",
+    "uvicorn==0.54.0",
+    "openpyxl==3.1.5",
+    "requests==2.34.2",
+    "python-multipart==0.0.32",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "httpx==0.28.1"]
+
+[tool.setuptools]
+py-modules = []

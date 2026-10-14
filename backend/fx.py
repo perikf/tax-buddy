@@ -1,0 +1,68 @@
+"""GBP FX table: shipped CSV cache + in-memory startup top-up + lookups.
+rate = GBP/CCY; convert = divide. Refresh the shipped cache with scripts/fx_rates.py."""
+import csv
+import datetime as dt
+import logging
+from decimal import Decimal
+from pathlib import Path
+
+import requests
+
+log = logging.getLogger("taxbuddy.fx")
+
+CURRENCIES = ["AUD", "CAD", "CHF", "DKK", "EUR", "HKD", "JPY", "NOK", "PLN", "SEK", "USD"]
+SUPPORTED = set(CURRENCIES) | {"GBP"}
+CSV_PATH = Path(__file__).parent / "data" / "fx_rates.csv"
+FX_START = dt.date(2015, 4, 2)
+MAX_STEP_BACK_DAYS = 7
+
+
+class FxTable:
+    def __init__(self):
+        self.rates: dict[dt.date, dict[str, Decimal]] = {}
+
+    @property
+    def loaded(self) -> bool:
+        return bool(self.rates)
+
+    @property
+    def latest(self) -> dt.date | None:
+        return max(self.rates) if self.rates else None
+
+    def load(self, path: Path = CSV_PATH) -> None:
+        with open(path, newline="") as f:
+            for row in csv.DictReader(f):
+                day = dt.date.fromisoformat(row["date"])
+                self.rates[day] = {
+                    c: Decimal(row[c]) for c in CURRENCIES if row.get(c)
+                }
+
+    def top_up(self) -> None:
+        """Fetch business days after the cached latest, in memory only. Best-effort."""
+        start = (self.latest or FX_START) + dt.timedelta(days=1)
+        end = dt.date.today()
+        if start > end:
+            return
+        url = (
+            f"https://api.frankfurter.app/{start.isoformat()}..{end.isoformat()}"
+            f"?from=GBP&to={','.join(CURRENCIES)}"
+        )
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        new_days = resp.json().get("rates", {})
+        for day_str, rates in new_days.items():
+            self.rates[dt.date.fromisoformat(day_str)] = {
+                c: Decimal(str(v)) for c, v in rates.items() if v is not None
+            }
+        log.info("FX top-up: %d new days", len(new_days))
+
+    def get_rate(self, currency: str, day: dt.date) -> tuple[Decimal, dt.date] | None:
+        """Trade-date rate, stepping back up to 7 calendar days. None if no hit."""
+        if currency == "GBP":
+            return Decimal(1), day
+        for back in range(MAX_STEP_BACK_DAYS + 1):
+            d = day - dt.timedelta(days=back)
+            rate = self.rates.get(d, {}).get(currency)
+            if rate is not None:
+                return rate, d
+        return None
