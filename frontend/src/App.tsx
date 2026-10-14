@@ -123,8 +123,9 @@ export default function App() {
             </h2>
             <p className="text-sm text-neutral-400 mb-4">
               One CSV <strong className="text-neutral-300">covering every year since your first purchase</strong> —
-              HMRC matching needs your full history. Several yearly exports? Join them into one file
-              end-to-end first; they stack cleanly.
+              HMRC matching needs your full history. Export it directly from IBKR as a single file:
+              Performance &amp; Reports → Statements → Activity, date range from your first trade to today,
+              format CSV. No need to merge files by hand.
             </p>
             <div
               onClick={() => inputRef.current?.click()}
