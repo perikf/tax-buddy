@@ -183,18 +183,13 @@ export default function App() {
               ))}
             </div>
             {mode === "tax-year" ? (
-              <div>
-                <select value={year} onChange={(e) => setYear(e.target.value)} className={`w-36 ${input}`}>
-                  {years.map((y) => (
-                    <option key={y.label} value={y.label} className="bg-[#111114]">
-                      {y.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-sm text-neutral-500">
-                  {period.start} → {period.end}
-                </p>
-              </div>
+              <select value={year} onChange={(e) => setYear(e.target.value)} className={`max-w-full ${input}`}>
+                {years.map((y) => (
+                  <option key={y.label} value={y.label} className="bg-[#111114]">
+                    {y.label} &nbsp;·&nbsp; {y.start} → {y.end}
+                  </option>
+                ))}
+              </select>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
                 <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className={input} />
