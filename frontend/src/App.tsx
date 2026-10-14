@@ -174,7 +174,7 @@ export default function App() {
             <div className="mb-4 flex gap-2">
               {(["tax-year", "custom"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition
+                  className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition
                     ${mode === m
                       ? "bg-white/10 text-white ring-1 ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
                       : "text-neutral-400 hover:bg-white/[0.05] hover:text-neutral-200"}`}>
@@ -183,15 +183,20 @@ export default function App() {
               ))}
             </div>
             {mode === "tax-year" ? (
-              <select value={year} onChange={(e) => setYear(e.target.value)} className={`w-52 ${input}`}>
-                {years.map((y) => (
-                  <option key={y.label} value={y.label} className="bg-[#111114]">
-                    {y.label} &nbsp;({y.start} → {y.end})
-                  </option>
-                ))}
-              </select>
+              <div>
+                <select value={year} onChange={(e) => setYear(e.target.value)} className={`w-36 ${input}`}>
+                  {years.map((y) => (
+                    <option key={y.label} value={y.label} className="bg-[#111114]">
+                      {y.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-sm text-neutral-500">
+                  {period.start} → {period.end}
+                </p>
+              </div>
             ) : (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className={input} />
                 <span className="text-neutral-500">to</span>
                 <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className={input} />
