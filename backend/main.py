@@ -17,22 +17,29 @@ from backend.models import ApiError
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("taxbuddy")
 
-MAX_FILE_BYTES = 20 * 1024 * 1024
+MAX_FILE_BYTES = int(4.5 * 1024 * 1024)
 META_LIST_CAP = 30
 fx_table = FxTable()
 DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def ensure_fx() -> None:
+    if fx_table.loaded:
+        return
     try:
         fx_table.load()
     except OSError as e:
         log.error("FX cache missing: %s", e)
+        return
     try:
         fx_table.top_up()
     except Exception as e:
         log.warning("FX top-up failed (continuing with cache): %s", e)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ensure_fx()
     yield
 
 
@@ -63,7 +70,7 @@ async def _read_csv(upload: UploadFile) -> bytes:
         raise ApiError("INVALID_FILE_TYPE", f"'{upload.filename}' is not a .csv file.")
     raw = await upload.read(MAX_FILE_BYTES + 1)
     if len(raw) > MAX_FILE_BYTES:
-        raise ApiError("FILE_TOO_LARGE", f"'{upload.filename}' exceeds 20 MB.")
+        raise ApiError("FILE_TOO_LARGE", f"'{upload.filename}' exceeds 4.5 MB.")
     if not raw:
         raise ApiError("INVALID_FILE_TYPE", f"'{upload.filename}' is empty.")
     return raw
@@ -71,6 +78,7 @@ async def _read_csv(upload: UploadFile) -> bytes:
 
 def _pipeline(raw: bytes, filename: str, start: date, end: date,
               period_label: str | None) -> tuple[bytes, str, dict]:
+    ensure_fx()
     merged = parser.parse(raw, filename)
     result = engine.run(merged.trades, fx_table, merged.instruments)
     gaps = engine.validate_history(result.net_quantities, result.first_trade_is_sell,
@@ -122,6 +130,7 @@ async def calculate(
 
 @app.get("/health")
 async def health():
+    ensure_fx()
     return {"status": "ok", "fx_rates_loaded": fx_table.loaded,
             "fx_latest": fx_table.latest.isoformat() if fx_table.latest else None}
 

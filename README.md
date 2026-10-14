@@ -25,6 +25,16 @@ end-to-end into one file), pick a tax year, download the report.
 
 ## Production
 
+Vercel (stable URL): the repo deploys as-is — `vercel.json` builds the frontend and routes
+`/calculate` + `/health` to the FastAPI function in `api/index.py`; `requirements.txt`
+mirrors the runtime dependencies from `pyproject.toml` for Vercel's Python builder.
+
+```
+npx vercel --prod
+```
+
+Self-hosted alternative:
+
 ```
 npm --prefix frontend run build
 .venv/bin/uvicorn backend.main:app --port 8000

@@ -142,7 +142,7 @@ export default function App() {
               </div>
               <p className="font-medium text-neutral-200">Drop your CSV here or click to browse</p>
               <p className="text-sm text-neutral-500 mt-1">
-                Activity Statement → CSV · one file with your full history · 20 MB max
+                Activity Statement → CSV · one file with your full history · 4.5 MB max
               </p>
               <input
                 ref={inputRef} type="file" accept=".csv" hidden

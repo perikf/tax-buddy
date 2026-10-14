@@ -3,7 +3,7 @@
 ## Input — IBKR CSV Activity Statement
 Tagged-row CSV: every row is `section, rowtype, payload…`. Many sections in one file. Rows with < 2 cols or blank section/rowtype are skipped.
 
-**File checks:** one .csv file, max 20 MB (enforce at the upload boundary, before buffering); reject empty. Decode utf-8 then latin-1, stripping BOMs anywhere in the file (concatenated statements carry one per boundary). Separator `;` only if line 1 has `;` and no `,`, else `,`.
+**File checks:** one .csv file, max 4.5 MB (enforce at the upload boundary, before buffering); reject empty. Decode utf-8 then latin-1, stripping BOMs anywhere in the file (concatenated statements carry one per boundary). Separator `;` only if line 1 has `;` and no `,`, else `,`.
 
 **Trades section** — required: a `Trades` section with a `Header` row + ≥1 `Data` row. Columns accessed by name; payload starts at col index 2. A statement carries **several Trades subsections**, each introduced by its own `Header` row — reset the column map on every one. Required columns (all, in at least one subsection): `DataDiscriminator, Asset Category, Currency, Symbol, Date/Time, Quantity, T. Price, C. Price, Proceeds, Comm/Fee, Basis, Realized P/L, Realized P/L %, MTM P/L, Code`. A subsection missing required columns is an error only if it contains supported-category rows; otherwise its rows are skipped + warned (e.g. the Forex subsection, whose header differs).
 
@@ -60,4 +60,4 @@ Filename: `TaxBuddy_CGT_2024-25.xlsx` when `period_label` matches `\d{4}/\d{2}` 
 **GET /health** → `{status:"ok", …fx health}` (or `{status:"ok", fx_rates_loaded:false}`).
 
 ## Errors (HTTP 400, body `{error, message}`)
-`INVALID_DATES` (non-ISO or start > end) · `INVALID_FILE_TYPE` (not .csv / empty) · `FILE_TOO_LARGE` (> 20 MB per file) · `INVALID_ENCODING` · `NOT_IBKR_FORMAT` · `MISSING_TRADES_SECTION` · `EMPTY_TRADES` · `MISSING_REQUIRED_COLUMNS` (lists the missing ones). Any other → 500.
+`INVALID_DATES` (non-ISO or start > end) · `INVALID_FILE_TYPE` (not .csv / empty) · `FILE_TOO_LARGE` (> 4.5 MB) · `INVALID_ENCODING` · `NOT_IBKR_FORMAT` · `MISSING_TRADES_SECTION` · `EMPTY_TRADES` · `MISSING_REQUIRED_COLUMNS` (lists the missing ones). Any other → 500.

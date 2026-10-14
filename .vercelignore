@@ -1,0 +1,6 @@
+data/
+.venv/
+frontend/node_modules/
+backend/tests/
+.claude/
+docs/
