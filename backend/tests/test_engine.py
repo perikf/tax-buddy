@@ -2,9 +2,9 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from backend import engine
-from backend.engine import filter_period, run, validate_history
+from backend.engine import EngineResult, filter_period, run, totals, validate_history
 from backend.fx import FxTable
-from backend.models import OpenPosition, Trade
+from backend.models import OpenPosition, ParseResult, Trade
 
 D = Decimal
 BASE = date(2024, 6, 3)
@@ -118,22 +118,29 @@ def test_filter_period_inclusive():
 
 
 def test_validate_history_directions():
-    nets = {"A|USD": D(50), "B|USD": D(10)}
-    first_sell = {"A|USD": False, "B|USD": False, "C|USD": True}
-    opens = [OpenPosition("A", "USD", D(80)), OpenPosition("B", "USD", D(5))]
-    warnings = []
-    gaps = validate_history(nets, first_sell, opens, True, warnings)
-    by_symbol = {g.symbol: g for g in gaps}
+    result = EngineResult(net_quantities={"A|USD": D(50), "B|USD": D(10)},
+                          first_trade_is_sell={"A|USD": False, "B|USD": False, "C|USD": True})
+    parsed = ParseResult(open_positions=[OpenPosition("A", "USD", D(80)), OpenPosition("B", "USD", D(5))],
+                         has_open_positions_section=True)
+    by_symbol = {g.symbol: g for g in validate_history(result, parsed)}
     assert by_symbol["A"].gap == D(30)
     assert by_symbol["B"].gap == D(-5)
-    assert any("OVERSTATED" in w for w in warnings) and any("UNDERSTATED" in w for w in warnings)
+    assert any("OVERSTATED" in w for w in result.warnings) and any("UNDERSTATED" in w for w in result.warnings)
 
 
 def test_validate_history_no_section_warns():
-    warnings = []
-    gaps = validate_history({"A|USD": D(5)}, {"A|USD": True}, [], False, warnings)
-    assert any("not verified" in w for w in warnings)
+    result = EngineResult(net_quantities={"A|USD": D(5)}, first_trade_is_sell={"A|USD": True})
+    gaps = validate_history(result, ParseResult())
+    assert any("not verified" in w for w in result.warnings)
     assert gaps[0].first_trade_is_sell and gaps[0].open_qty is None and gaps[0].gap is None
+
+
+def test_totals():
+    r = run([T(0, "100", "10"), T(40, "-10", "12"), T(40, "-10", "8", hour=15), T(50, "-10", "11")], fx(), {})
+    t = totals(r.disposals)
+    assert (t.proceeds, t.costs, t.net) == (D(310), D(300), D(10))
+    assert (t.gains, t.losses) == (D(30), D(20))
+    assert t.n_disposals == 2  # two distinct (symbol, date)
 
 
 def test_same_day_wins_over_short_cover_regardless_of_intraday_order():
@@ -145,7 +152,7 @@ def test_same_day_wins_over_short_cover_regardless_of_intraday_order():
 
 
 def test_identical_duplicate_fills_each_cover_shorts():
-    # two equal-value but distinct Trade objects (what merge now emits)
+    # two equal-value but distinct Trade objects
     trades = [T(0, "-200", "10"), T(40, "100", "8"), T(40, "100", "8")]
     r = run(trades, fx(), {})
     assert [(d.matching_rule, d.quantity_disposed) for d in r.disposals] == [

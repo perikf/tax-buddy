@@ -18,10 +18,7 @@ REQUIRED_TRADE_COLUMNS = [
     "Quantity", "T. Price", "C. Price", "Proceeds", "Comm/Fee", "Basis",
     "Realized P/L", "Realized P/L %", "MTM P/L", "Code",
 ]
-DECIMAL_COLUMNS = [
-    "Quantity", "T. Price", "C. Price", "Proceeds", "Comm/Fee", "Basis",
-    "Realized P/L", "Realized P/L %", "MTM P/L",
-]
+DECIMAL_COLUMNS = ["Quantity", "T. Price", "Proceeds", "Comm/Fee"]
 SUPPORTED_CATEGORIES = {"Stocks"}
 
 DOMICILES = {
@@ -86,7 +83,6 @@ def parse(raw: bytes, filename: str = "") -> ParseResult:
             raise ApiError("MISSING_TRADES_SECTION", "Statement has no Trades section.")
         raise ApiError("NOT_IBKR_FORMAT", "No Trades or Statement section — not an IBKR Activity Statement.")
 
-    # split concatenated statements on their Statement,Header boundary
     starts = [i for i, r in enumerate(rows)
               if r[0].strip() == "Statement" and r[1].strip() == "Header"]
     bounds = starts or [0]
@@ -127,7 +123,10 @@ def _parse_statement(rows: list[list[str]], tag: str) -> ParseResult:
             if payload[0].strip() == "Period":
                 result.period = payload[1].strip()
             elif payload[0].strip() == "WhenGenerated":
-                result.when_generated = payload[1].strip()
+                try:
+                    result.when_generated = _parse_dt(payload[1])
+                except ValueError:
+                    pass
 
         elif section in ("Open Positions", "Financial Instrument Information"):
             if rowtype == "Header":
@@ -139,7 +138,10 @@ def _parse_statement(rows: list[list[str]], tag: str) -> ParseResult:
                     _parse_instrument(payload, section_header, result)
 
     if not saw_full_header:
-        raise ApiError("MISSING_TRADES_SECTION", "Trades section has no Header row.")
+        if trades_header is None:
+            raise ApiError("MISSING_TRADES_SECTION", "Trades section has no Header row.")
+        raise ApiError("MISSING_REQUIRED_COLUMNS",
+                       f"Trades section missing columns: {', '.join(missing_columns)}")
     result.warnings.extend(f"Skipped {n} trade(s){tag}: {reason}." for reason, n in sorted(skips.items()))
     if not result.trades:
         raise ApiError("EMPTY_TRADES", "Trades section has no Order rows.")
@@ -170,20 +172,17 @@ def _parse_trade(row: list[str], header: dict[str, int], warnings: list[str],
         warnings.append(f"Skipped {label}: unparseable Date/Time.")
         return None
     try:
-        values = {c: _dec(_col(row, header, c)) for c in DECIMAL_COLUMNS}
+        quantity, price, proceeds, commission = (_dec(_col(row, header, c)) for c in DECIMAL_COLUMNS)
     except (InvalidOperation, ValueError):
         warnings.append(f"Skipped {label}: invalid numeric field.")
         return None
-    if values["Quantity"] == 0:
+    if quantity == 0:
         warnings.append(f"Skipped {label}: zero quantity.")
         return None
 
-    return Trade(
-        asset_category=category, currency=currency, symbol=symbol, dt=dt,
-        quantity=values["Quantity"], price=values["T. Price"],
-        proceeds=values["Proceeds"], commission=values["Comm/Fee"],
-        code=_col(row, header, "Code"),
-    )
+    return Trade(asset_category=category, currency=currency, symbol=symbol, dt=dt,
+                 quantity=quantity, price=price, proceeds=proceeds, commission=commission,
+                 code=_col(row, header, "Code"))
 
 
 def _parse_open_position(row: list[str], header: dict[str, int], result: ParseResult) -> None:
@@ -209,7 +208,6 @@ def _parse_instrument(row: list[str], header: dict[str, int], result: ParseResul
         symbol = symbol.strip()
         if symbol:
             result.instruments[symbol] = Instrument(
-                symbol=symbol,
                 description=_col(row, header, "Description"),
                 isin_conid=isin or _col(row, header, "Conid"),
                 domicile=_domicile(isin),
@@ -221,8 +219,7 @@ def _latest_trade_dt(r: ParseResult) -> datetime:
 
 
 def _drop_superseded(results: list[ParseResult], warnings: list[str]) -> list[ParseResult]:
-    """A reissued statement for the same Period supersedes the older one wholesale
-    (newest WhenGenerated wins), so amended trades never double-count."""
+    """Keep only the newest issue (WhenGenerated) of each Period."""
     by_period: dict[str, ParseResult] = {}
     kept = []
     for r in results:
@@ -232,19 +229,17 @@ def _drop_superseded(results: list[ParseResult], warnings: list[str]) -> list[Pa
         other = by_period.get(r.period)
         if other is None:
             by_period[r.period] = r
-        elif r.when_generated > other.when_generated:
+            continue
+        if (r.when_generated or datetime.min) > (other.when_generated or datetime.min):
             by_period[r.period] = r
-            warnings.append(f"Statement for {r.period} uploaded twice — kept the newest issue.")
-        else:
-            warnings.append(f"Statement for {other.period} uploaded twice — kept the newest issue.")
+        warnings.append(f"Statement for {r.period} uploaded twice — kept the newest issue.")
     return kept + list(by_period.values())
 
 
 def merge(results: list[ParseResult]) -> ParseResult:
-    """Merge statements (from one concatenated file or several uploads).
-    Duplicate trades across statements collapse to the max per-statement count,
-    so overlaps don't double-count while identical same-second fills within one
-    statement survive. Each kept trade is an independent copy."""
+    """Merge the statements of one file. Trades identical across statements collapse to
+    the max per-statement count; kept trades are independent copies; Open Positions come
+    from the statement with the latest trade date."""
     if len(results) == 1:
         return results[0]
 

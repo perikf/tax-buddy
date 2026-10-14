@@ -14,21 +14,21 @@ body {
   font-feature-settings: "cv11";
 }
 
-/* ---------- motion ---------- */
+/* ---------- motion (transform/opacity only) ---------- */
 @keyframes drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(7%, 6%) scale(1.18); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(7%, 6%); }
 }
 @keyframes drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-9%, 5%) scale(1.12); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-9%, 5%); }
 }
 @keyframes drift-c {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(6%, -7%) scale(1.22); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(6%, -7%); }
 }
 @keyframes grid-pan {
-  to { background-position: 26px 26px; }
+  to { transform: translate3d(26px, 26px, 0); }
 }
 @keyframes text-pan {
   to { background-position: 200% center; }
@@ -82,7 +82,6 @@ body {
   opacity: 1;
 }
 
-/* CTA sheen sweep on hover */
 .sheen-host:hover .sheen {
   animation: sheen 0.9s ease;
 }

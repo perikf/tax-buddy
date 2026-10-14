@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install requests
+      - run: pip install .
       - run: python backend/scripts/fx_rates.py
       - name: Commit updated rates
         run: |

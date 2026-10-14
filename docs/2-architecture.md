@@ -25,30 +25,37 @@ upload .csv (POST /calculate)
 ## Target structure
 ```
 tax-buddy/
-├── run.sh                    # dev launcher: uvicorn :8000 + Vite :5173 together
-├── pyproject.toml            # pinned deps
+├── run.sh                    # dev launcher: uvicorn + Vite together
+├── pyproject.toml            # the only dependency list (requirements.txt points at it for Vercel)
+├── vercel.json               # frontend build + asset cache headers; Vercel's FastAPI preset serves api/
+├── api/index.py              # Vercel entry: imports backend.main.app
+├── .github/workflows/        # fx-refresh: weekday ECB top-up committed to the repo
 ├── backend/
-│   ├── main.py               # HTTP routing + /calculate orchestration; FX top-up at startup;
-│   ├── models.py             # dataclasses + exceptions
-│   ├── parser.py             # parse ibkr csv
-│   ├── fx.py                 # load CSV + get_rate; in-memory startup top-up (no per-request network)
-│   ├── engine.py             # HMRC matching + Section 104 pool + history-gap validation
+│   ├── main.py               # HTTP routing + /calculate orchestration; SPA serving for self-host only
+│   ├── models.py             # dataclasses, rule/event vocabulary, exceptions
+│   ├── parser.py             # IBKR CSV → statements → merged ParseResult
+│   ├── fx.py                 # FxTable: shipped cache, freshness policy, get_rate
+│   ├── engine.py             # HMRC matching + Section 104 pools + history-gap validation + totals
 │   ├── excel.py              # generate_excel (lean styling)
-│   ├── data/fx_rates.csv     # shipped cache; topped up at startup
-│   ├── scripts/fx_rates.py   # full-history FX rebuild (Frankfurter/ECB) → backend/data/fx_rates.csv
-│   └── tests/
+│   ├── data/fx_rates.csv     # shipped ECB cache
+│   ├── scripts/fx_rates.py   # FX top-up (Frankfurter/ECB) → backend/data/fx_rates.csv
+│   └── tests/                # fixtures.py shared by the test modules
 └── frontend/
     ├── index.html
     ├── vite.config.ts
     └── src/
         ├── main.tsx
         ├── App.tsx           # single-screen state machine
+        ├── ui.tsx            # Card, Stat, useCountUp, class-name constants
+        ├── period.ts         # tax-year ranges, GBP formatting
         ├── api.ts
-        └── index.css
+        └── index.css         # theme + motion keyframes
 ```
 
+Dependencies are one-way: `models ← {fx, parser, engine, excel} ← main`.
+
 ## Notes
-- **FX freshness:** a daily GitHub Actions cron (`.github/workflows/fx-refresh.yml`, weekdays after the ECB publication) runs `backend/scripts/fx_rates.py` to top up `backend/data/fx_rates.csv` and commits the change, so every deploy ships complete rates. At runtime `ensure_fx` loads the shipped cache and fetches only when it is staler than the 7-day step-back window (self-heal); in steady state the request path does zero FX network. `get_rate` reads the in-memory table only.
+- **FX freshness:** the `FX refresh` workflow (weekdays, after the ECB publication) runs `backend/scripts/fx_rates.py` to top up `backend/data/fx_rates.csv` and commits it, so every deploy ships complete rates. `FxTable.ensure_ready()` loads the shipped cache and fetches only when it is staler than the 7-day step-back window — at most once per process, off the event loop. `get_rate` reads the in-memory table only.
 
 ## Running
-`./run.sh` — uvicorn (`:8000`) + Vite dev (`:5173`) together; Ctrl-C stops both. Vite proxies `/calculate` and `/health` → `:8000`. Single-server prod: `npm run build` → backend serves `frontend/dist` via a catch-all SPA route (register it **after** the API routes so it doesn't shadow them).
+See the [README](../README.md) for dev, test, deploy and self-host commands. The SPA catch-all in `main.py` is registered only when `frontend/dist` exists (self-host); on Vercel the static layer serves the frontend and only `/calculate` and `/health` reach the function.

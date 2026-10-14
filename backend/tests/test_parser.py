@@ -3,25 +3,7 @@ from decimal import Decimal
 
 from backend.models import ApiError
 from backend.parser import merge, parse
-
-HDR = ("Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,"
-       "Quantity,T. Price,C. Price,Proceeds,Comm/Fee,Basis,Realized P/L,"
-       "Realized P/L %,MTM P/L,Code")
-
-
-def row(sym="AAPL", dt="2024-05-01, 10:00:00", qty="10", price="100", comm="-1",
-        cat="Stocks", ccy="USD", disc="Order"):
-    return (f'Trades,Data,{disc},{cat},{ccy},{sym},"{dt}",{qty},{price},99,'
-            f"-1000,{comm},1000,0,0,0,O")
-
-
-def csv_bytes(*lines, bom=True, period="", generated=""):
-    head = "Statement,Header,Field Name,Field Value\nStatement,Data,BrokerName,IBKR\n"
-    if period:
-        head += f'Statement,Data,Period,"{period}"\n'
-    if generated:
-        head += f'Statement,Data,WhenGenerated,"{generated}"\n'
-    return (("﻿" if bom else "") + head + "\n".join(lines) + "\n").encode()
+from backend.tests.fixtures import FII_HDR, HDR, OPEN_HDR, csv_bytes, fii_row, open_row, row
 
 
 def test_parse_happy_path_with_bom():
@@ -43,13 +25,8 @@ def test_skip_rules_aggregate_warnings():
 
 
 def test_sections_open_positions_and_instruments():
-    r = parse(csv_bytes(
-        HDR, row(),
-        "Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult",
-        "Open Positions,Data,Summary,Stocks,USD,AAPL,25,1",
-        "Open Positions,Data,Total,Stocks,USD,,25,1",
-        "Financial Instrument Information,Header,Asset Category,Symbol,Description,Conid,Security ID,Type",
-        "Financial Instrument Information,Data,Stocks,AAPL,APPLE INC,265598,US0378331005,COMMON"))
+    r = parse(csv_bytes(HDR, row(), OPEN_HDR, open_row(), open_row(sym="", disc="Total"),
+                        FII_HDR, fii_row()))
     assert [(p.symbol, p.quantity) for p in r.open_positions] == [("AAPL", Decimal(25))]
     inst = r.instruments["AAPL"]
     assert (inst.isin_conid, inst.domicile) == ("US0378331005", "United States")
@@ -69,6 +46,9 @@ def test_error_codes():
     with pytest.raises(ApiError) as e:
         parse(csv_bytes(bad_hdr, row()))
     assert e.value.error == "MISSING_REQUIRED_COLUMNS"
+    with pytest.raises(ApiError) as e:  # only a deficient header, no supported rows
+        parse(csv_bytes(bad_hdr, row(cat="Forex")))
+    assert e.value.error == "MISSING_REQUIRED_COLUMNS"
 
 
 def test_deficient_subsection_tolerated_for_unsupported_rows():
@@ -79,20 +59,18 @@ def test_deficient_subsection_tolerated_for_unsupported_rows():
 
 
 def test_merge_dedupes_and_emits_independent_copies():
-    twin = csv_bytes(HDR, row(), row())            # two identical fills, one file
+    twin = csv_bytes(HDR, row(), row())            # two identical fills, one statement
     overlap = csv_bytes(HDR, row(), row(sym="MSFT"))
     r = merge([parse(twin), parse(overlap)])
     aapl = [t for t in r.trades if t.symbol == "AAPL"]
     assert sorted(t.symbol for t in r.trades) == ["AAPL", "AAPL", "MSFT"]  # max-count kept
-    assert aapl[0] is not aapl[1]                  # engine must see distinct objects
+    assert aapl[0] is not aapl[1]
     assert any("duplicate" in w for w in r.warnings)
 
 
 def test_concatenated_statements_keep_latest_positions_snapshot():
-    open_pos = ["Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult"]
-    stale = csv_bytes(*open_pos, "Open Positions,Data,Summary,Stocks,USD,AAPL,10,1",
-                      "Open Positions,Data,Summary,Stocks,USD,MSFT,5,1", HDR, row())
-    fresh = csv_bytes(*open_pos, "Open Positions,Data,Summary,Stocks,USD,AAPL,5,1",
+    stale = csv_bytes(OPEN_HDR, open_row(qty="10"), open_row(sym="MSFT", qty="5"), HDR, row())
+    fresh = csv_bytes(OPEN_HDR, open_row(qty="5"),
                       HDR, row(qty="-5", dt="2025-05-01, 10:00:00"), bom=False)
     for combined in (stale + fresh, fresh + stale):   # either concatenation order
         r = parse(combined)
@@ -107,6 +85,6 @@ def test_reissued_statement_supersedes_same_period():
     amended = csv_bytes(HDR, row(price="101"),
                         period="January 1, 2024 - December 31, 2024",
                         generated="2025-03-01, 08:00:00")
-    r = merge([parse(original), parse(amended)])
+    r = parse(original + amended)
     assert [t.price for t in r.trades] == [Decimal(101)]
     assert any("newest issue" in w for w in r.warnings)

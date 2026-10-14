@@ -1,21 +1,17 @@
 """HMRC CGT engine: GBP conversion, matching (same-day -> B&B -> S104 -> short),
-Section 104 pools, pool events, history-gap validation. Decimal throughout."""
+Section 104 pools, pool events, history-gap validation, period totals. Decimal throughout."""
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from backend.fx import FxTable
-from backend.models import (DisposalResult, FxRecord, HistoryGap, Instrument,
-                            OpenPosition, PoolEvent, Trade)
+from backend.models import (ACQUISITION, BED_AND_BREAKFAST, DISPOSAL, SAME_DAY, SECTION_104,
+                            SHORT_CLOSE, SHORT_OPEN, DisposalResult, FxRecord, HistoryGap,
+                            Instrument, ParseResult, PoolEvent, Totals, Trade)
 
 PENNY = Decimal("0.01")
 BB_WINDOW = timedelta(days=30)
-
-SAME_DAY = "Same-Day"
-BED_AND_BREAKFAST = "Bed & Breakfast"
-SECTION_104 = "Section 104"
-SHORT_CLOSE = "Short Close"
 
 
 def q2(value: Decimal) -> Decimal:
@@ -23,8 +19,8 @@ def q2(value: Decimal) -> Decimal:
 
 
 def convert_trades(trades: list[Trade], fx: FxTable, warnings: list[str]) -> tuple[list[Trade], list[FxRecord]]:
-    """GBP-convert in place; returns (converted trades, fx records). No-rate trades are
-    excluded from the engine, kept in FX Detail, and warned loudly."""
+    """GBP-convert in place; returns (converted trades, fx records). Trades with no rate
+    are excluded from the engine and kept in FX Detail."""
     converted, records = [], []
     for t in trades:
         if t.currency == "GBP":
@@ -52,16 +48,13 @@ def convert_trades(trades: list[Trade], fx: FxTable, warnings: list[str]) -> tup
 
 @dataclass
 class Slot:
-    """A buy's unmatched quantity. Held out of the pool while same-day sells and
-    earlier sells' B&B claims (both reach forward) can still consume it; once
-    processing moves strictly past its date it first covers outstanding shorts,
-    then pools."""
+    """A buy's unmatched quantity, held out of the pool until processing passes its date."""
     trade: Trade
     remaining: Decimal
 
     def cost_for_qty(self, qty: Decimal) -> Decimal:
         t = self.trade
-        total = abs(t.quantity) * t.price_gbp - t.commission_gbp  # commission (negative) adds to cost
+        total = abs(t.quantity) * t.price_gbp - t.commission_gbp
         return q2(total * qty / abs(t.quantity))
 
 
@@ -74,8 +67,6 @@ class Pool:
     @property
     def avg_cost(self) -> Decimal:
         return self.total_cost_gbp / self.quantity if self.quantity else Decimal(0)
-
-    avg_proceeds = avg_cost
 
     def add(self, qty: Decimal, cost_gbp: Decimal) -> None:
         self.quantity += qty
@@ -114,7 +105,7 @@ def run(trades: list[Trade], fx: FxTable, instruments: dict[str, Instrument]) ->
 def _process_asset(key: str, trades: list[Trade], instruments: dict[str, Instrument],
                    result: EngineResult) -> None:
     symbol = trades[0].symbol
-    info = instruments.get(symbol, Instrument(symbol))
+    info = instruments.get(symbol, Instrument())
     pool, short_pool = Pool(), Pool()
     slots = [Slot(t, abs(t.quantity)) for t in trades if t.quantity > 0]
     slot_dates = [s.trade.date for s in slots]   # ascending; drives the window slices
@@ -151,16 +142,16 @@ def _process_asset(key: str, trades: list[Trade], instruments: dict[str, Instrum
             live += 1
             if slot.remaining > 0 and short_pool.quantity > 0:
                 match = min(slot.remaining, short_pool.quantity)
-                proceeds = q2(short_pool.avg_proceeds * match)
+                proceeds = q2(short_pool.avg_cost * match)
                 short_pool.remove(match)
                 cost = slot.cost_for_qty(match)
                 slot.remaining -= match
                 emit_disposal(slot.trade, match, SHORT_CLOSE, None, allowable=cost, proceeds=proceeds)
-                emit_event("Short Close", slot.trade.date, match, -proceeds, short=True)
+                emit_event(SHORT_CLOSE, slot.trade.date, match, -proceeds, short=True)
             if slot.remaining > 0:
                 cost = slot.cost_for_qty(slot.remaining)
                 pool.add(slot.remaining, cost)
-                emit_event("Acquisition", slot.trade.date, slot.remaining, cost)
+                emit_event(ACQUISITION, slot.trade.date, slot.remaining, cost)
                 slot.remaining = Decimal(0)
 
     def take_from_slots(sell: Trade, remaining: Decimal, lo: int, hi: int, rule: str) -> Decimal:
@@ -193,47 +184,56 @@ def _process_asset(key: str, trades: list[Trade], instruments: dict[str, Instrum
             cost = pool.remove(match)
             remaining -= match
             emit_disposal(t, match, SECTION_104, None, allowable=cost)
-            emit_event("Disposal", t.date, -match, -cost)
+            emit_event(DISPOSAL, t.date, -match, -cost)
         # 4. excess opens a short
         if remaining > 0:
             proportion = remaining / abs(t.quantity)
             proceeds = q2(remaining * t.price_gbp + t.commission_gbp * proportion)
             short_pool.add(remaining, proceeds)
-            emit_event("Short Open", t.date, -remaining, proceeds, short=True)
+            emit_event(SHORT_OPEN, t.date, -remaining, proceeds, short=True)
     flush(None)
 
     result.net_quantities[key] = pool.quantity - short_pool.quantity
 
 
-def validate_history(net_quantities: dict[str, Decimal], first_trade_is_sell: dict[str, bool],
-                     open_positions: list[OpenPosition], has_section: bool,
-                     warnings: list[str]) -> list[HistoryGap]:
+def validate_history(result: EngineResult, parsed: ParseResult) -> list[HistoryGap]:
     """Net position vs IBKR open positions; any mismatch or sell-first asset is flagged.
-    Never blocks."""
-    if not has_section:
-        warnings.append("No Open Positions section found — history completeness not verified.")
-        return [HistoryGap(key.split("|")[0], net_quantities[key], None, None, True)
-                for key, is_sell in first_trade_is_sell.items() if is_sell]
+    Appends warnings to result.warnings. Never blocks."""
+    nets, first_sell = result.net_quantities, result.first_trade_is_sell
+    if not parsed.has_open_positions_section:
+        result.warnings.append("No Open Positions section found — history completeness not verified.")
+        return [HistoryGap(key.split("|")[0], nets[key], None, None, True)
+                for key, is_sell in first_sell.items() if is_sell]
 
     gaps = []
-    open_by_key = {p.key: p for p in open_positions}
-    for key in sorted(set(net_quantities) | set(open_by_key)):
-        net_qty = net_quantities.get(key, Decimal(0))
+    open_by_key = {p.key: p for p in parsed.open_positions}
+    for key in sorted(set(nets) | set(open_by_key)):
+        net_qty = nets.get(key, Decimal(0))
         open_qty = open_by_key[key].quantity if key in open_by_key else Decimal(0)
-        first_sell = first_trade_is_sell.get(key, False)
-        if net_qty != open_qty or first_sell:
-            gaps.append(HistoryGap(key.split("|")[0], net_qty, open_qty, open_qty - net_qty, first_sell))
+        if net_qty != open_qty or first_sell.get(key, False):
+            gaps.append(HistoryGap(key.split("|")[0], net_qty, open_qty, open_qty - net_qty,
+                                   first_sell.get(key, False)))
     for g in gaps:
         if g.gap and g.gap > 0:
-            warnings.append(f"{g.symbol}: pool {g.pool_qty} < IBKR holds {g.open_qty} — "
-                            f"missing buys, gains may be OVERSTATED.")
+            result.warnings.append(f"{g.symbol}: pool {g.pool_qty} < IBKR holds {g.open_qty} — "
+                                   f"missing buys, gains may be OVERSTATED.")
         elif g.gap and g.gap < 0:
-            warnings.append(f"{g.symbol}: pool {g.pool_qty} > IBKR holds {g.open_qty} — "
-                            f"missing sells, gains may be UNDERSTATED.")
+            result.warnings.append(f"{g.symbol}: pool {g.pool_qty} > IBKR holds {g.open_qty} — "
+                                   f"missing sells, gains may be UNDERSTATED.")
         if g.first_trade_is_sell:
-            warnings.append(f"{g.symbol}: first trade in history is a sell — earlier buys are missing.")
+            result.warnings.append(f"{g.symbol}: first trade in history is a sell — earlier buys are missing.")
     return gaps
 
 
 def filter_period(disposals: list[DisposalResult], start: date, end: date) -> list[DisposalResult]:
     return [d for d in disposals if start <= d.disposal_date <= end]
+
+
+def totals(disposals: list[DisposalResult]) -> Totals:
+    return Totals(
+        proceeds=sum((d.proceeds_gbp for d in disposals), Decimal(0)),
+        costs=sum((d.allowable_cost_gbp for d in disposals), Decimal(0)),
+        gains=sum((d.gain_loss_gbp for d in disposals if d.gain_loss_gbp > 0), Decimal(0)),
+        losses=sum((-d.gain_loss_gbp for d in disposals if d.gain_loss_gbp < 0), Decimal(0)),
+        n_disposals=len({(d.symbol, d.disposal_date) for d in disposals}),
+    )

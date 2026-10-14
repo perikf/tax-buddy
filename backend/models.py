@@ -1,7 +1,18 @@
-"""Dataclasses and API exceptions."""
+"""Dataclasses, shared vocabulary, and API exceptions."""
 import datetime as dt
 from dataclasses import dataclass, field
 from decimal import Decimal
+
+# matching rules (DisposalResult.matching_rule)
+SAME_DAY = "Same-Day"
+BED_AND_BREAKFAST = "Bed & Breakfast"
+SECTION_104 = "Section 104"
+SHORT_CLOSE = "Short Close"
+
+# pool events (PoolEvent.event_type)
+ACQUISITION = "Acquisition"
+DISPOSAL = "Disposal"
+SHORT_OPEN = "Short Open"
 
 
 class ApiError(Exception):
@@ -40,7 +51,6 @@ class Trade:
 
 @dataclass
 class Instrument:
-    symbol: str
     description: str = ""
     isin_conid: str = ""
     domicile: str = ""
@@ -64,8 +74,8 @@ class ParseResult:
     instruments: dict[str, Instrument] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     has_open_positions_section: bool = False
-    period: str = ""           # Statement section: Period
-    when_generated: str = ""   # Statement section: WhenGenerated
+    period: str = ""                           # Statement section: Period
+    when_generated: dt.datetime | None = None  # Statement section: WhenGenerated
 
 
 @dataclass
@@ -74,7 +84,7 @@ class DisposalResult:
     symbol: str
     asset_category: str
     quantity_disposed: Decimal
-    matching_rule: str         # Same-Day | Bed & Breakfast | Section 104 | Short Close
+    matching_rule: str
     acquisition_date: dt.date | None
     proceeds_gbp: Decimal
     allowable_cost_gbp: Decimal
@@ -94,7 +104,7 @@ class PoolEvent:
     date: dt.date
     symbol: str
     asset_category: str
-    event_type: str            # Acquisition | Disposal | Short Open | Short Close
+    event_type: str
     quantity_delta: Decimal
     cost_delta_gbp: Decimal
     pool_quantity_after: Decimal
@@ -122,3 +132,16 @@ class HistoryGap:
     open_qty: Decimal | None   # None: no Open Positions section to compare against
     gap: Decimal | None
     first_trade_is_sell: bool = False
+
+
+@dataclass
+class Totals:
+    proceeds: Decimal
+    costs: Decimal
+    gains: Decimal
+    losses: Decimal
+    n_disposals: int           # distinct (symbol, date)
+
+    @property
+    def net(self) -> Decimal:
+        return self.proceeds - self.costs

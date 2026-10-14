@@ -60,7 +60,7 @@ remove: cost_removed = (avg_cost * q).quantize(0.01, HALF_UP)
         quantity -= q;  total_cost_gbp -= cost_removed
         if quantity == 0: total_cost_gbp = 0    # dust guard
 ```
-The short pool is symmetric on total proceeds / `avg_proceeds` (add on short-open, remove on short-close).
+The short pool is the same structure with cost meaning proceeds (add on short-open, remove on short-close).
 
 ## Decimal invariants
 - `Decimal` everywhere; never float.
@@ -90,10 +90,10 @@ The short pool is symmetric on total proceeds / `avg_proceeds` (add on short-ope
 | Currencies (11) | AUD CAD CHF DKK EUR HKD JPY NOK PLN SEK USD |
 | Cache | `backend/data/fx_rates.csv` (shipped, topped up at startup), cols `date,AUD,…,USD`, from 2015-04-02 |
 
-Load the CSV into memory at startup and look up; a best-effort startup top-up fills missing recent business days **in memory only** (network only at startup, never per request; the shipped file is refreshed by `scripts/fx_rates.py`, never at runtime) — see [2-architecture.md](2-architecture.md).
+`FxTable` loads the shipped CSV into memory and looks rates up from it. If the cache is staler than the step-back window it fetches the missing days once per process (in memory only); the shipped file itself is advanced by the refresh workflow — see [2-architecture.md](2-architecture.md).
 
 ## History-gap validation
-Run after pools are built, before download. Compare each net quantity (long − short, key `symbol|currency`) to its IBKR Open Position; flag **any mismatch**:
+Run after pools are built, before download. Compare each rebuilt net quantity (`pool_qty` = long − short, key `symbol|currency`) to its IBKR Open Position; flag **any mismatch**:
 - `pool_qty < open_qty` → missing buys → cost understated → gains OVERSTATED (HIGH).
 - `pool_qty > open_qty` → missing sells → gains UNDERSTATED (HIGH).
 - Also flag **first trade for a symbol is a sell** → an acquisition is missing (HIGH).
@@ -101,6 +101,9 @@ Run after pools are built, before download. Compare each net quantity (long − 
 - No Open Positions section → skip the check + warn; first-trade-is-sell flags are still reported with `open_qty`/`gap` = null (never fabricate a zero).
 
 Surface gaps to the UI before download; user can re-upload or continue. **Never block.**
+
+## Period totals
+`totals(disposals)` is the single source for the summary figures used by the workbook and the response metadata: proceeds, allowable costs, gains, losses, net (= proceeds − costs) and the number of disposals (distinct `(symbol, date)` — SA108 box 23).
 
 ## Scope rules
 - **No short-side 30-day B&B:** short closes match the short pool only.

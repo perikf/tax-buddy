@@ -1,4 +1,2 @@
-"""Vercel entry: /calculate and /health are rewritten here; Vercel serves the SPA."""
-from backend.main import app
-
-__all__ = ["app"]
+"""Vercel entry point for the FastAPI app."""
+from backend.main import app  # noqa: F401

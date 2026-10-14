@@ -6,27 +6,11 @@ import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, fx_table
-from backend.tests.test_parser import HDR, csv_bytes, row
+from backend.main import app
+from backend.tests.fixtures import FULL_STATEMENT
 
 DATA = Path(__file__).parent.parent.parent / "data"
 client = TestClient(app)
-
-FIXTURE = csv_bytes(
-    HDR,
-    row(qty="100", price="100", dt="2024-05-01, 10:00:00"),
-    row(qty="-40", price="120", dt="2024-07-01, 10:00:00"),
-    "Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult",
-    "Open Positions,Data,Summary,Stocks,USD,AAPL,60,1",
-    "Financial Instrument Information,Header,Asset Category,Symbol,Description,Conid,Security ID,Type",
-    "Financial Instrument Information,Data,Stocks,AAPL,APPLE INC,265598,US0378331005,COMMON",
-    period="January 1, 2024 - December 31, 2024", generated="2025-01-10, 08:00:00",
-)
-
-
-def setup_module():
-    if not fx_table.loaded:
-        fx_table.load()
 
 
 def _post(name, content, **form):
@@ -45,24 +29,25 @@ def test_health():
 
 
 def test_calculate_fixture_end_to_end():
-    r = _post("2024.csv", FIXTURE)
+    r = _post("2024.csv", FULL_STATEMENT)
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="TaxBuddy_CGT_2024-25.xlsx"'
     m = meta(r)
-    assert m["gap_count"] == 0 and m["history_verified"] is True
+    assert m["gaps"]["count"] == 0 and m["disposals"] == 1
+    assert m["net_gain_gbp"] == pytest.approx(m["proceeds_gbp"] - m["costs_gbp"])
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     assert wb.sheetnames == ["CGT Summary", "1 STOCKS", "Pool History", "FX Detail"]
     assert wb["CGT Summary"]["B10"].value == 1  # SA108 box 23
 
 
 def test_unsafe_period_label_falls_back_to_dates():
-    r = _post("a.csv", FIXTURE, period_label='24/25€"')
+    r = _post("a.csv", FULL_STATEMENT, period_label='24/25€"')
     assert r.status_code == 200
     assert "2024-04-06_to_2025-04-05" in r.headers["content-disposition"]
 
 
 def test_error_responses():
-    r = _post("a.csv", FIXTURE, start_date="2025-01-01", end_date="2024-01-01")
+    r = _post("a.csv", FULL_STATEMENT, start_date="2025-01-01", end_date="2024-01-01")
     assert (r.status_code, r.json()["error"]) == (400, "INVALID_DATES")
     r = _post("x.txt", b"hi")
     assert (r.status_code, r.json()["error"]) == (400, "INVALID_FILE_TYPE")
@@ -84,17 +69,6 @@ def test_calculate_real_statements_combined_into_one_file():
     r = _post("full_history.csv", combined)
     assert r.status_code == 200
     m = meta(r)
-    assert m["gap_count"] == 0 and m["warning_count"] >= 2
+    assert m["gaps"]["count"] == 0 and m["warnings"]["count"] >= 2
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     assert {"CGT Summary", "1 STOCKS", "Pool History", "FX Detail"} <= set(wb.sheetnames)
-
-
-def test_ensure_fx_skips_fetch_when_cache_fresh(monkeypatch):
-    import backend.main as main
-
-    def boom():
-        raise AssertionError("top_up must not run when the cache is fresh")
-
-    monkeypatch.setattr(fx_table, "top_up", boom)
-    assert fx_table.loaded  # loaded by setup_module; shipped cache is current
-    main.ensure_fx()

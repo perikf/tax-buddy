@@ -6,21 +6,24 @@ export interface HistoryGap {
   first_trade_is_sell: boolean;
 }
 
+export interface Capped<T> {
+  items: T[];
+  count: number;
+  truncated: boolean;
+}
+
 export interface CalcResult {
   blob: Blob;
   filename: string;
-  warningCount: number;
-  warnings: string[];
-  warningsTruncated: boolean;
-  gapCount: number;
-  gaps: HistoryGap[];
-  gapsTruncated: boolean;
-  historyVerified: boolean;
+  warnings: Capped<string>;
+  gaps: Capped<HistoryGap>;
   proceeds: number;
   costs: number;
   netGain: number;
   disposals: number;
 }
+
+const EMPTY = { items: [], count: 0, truncated: false };
 
 export async function calculate(
   file: File,
@@ -46,17 +49,12 @@ export async function calculate(
   return {
     blob: await resp.blob(),
     filename,
-    warningCount: meta.warning_count ?? 0,
-    warnings: meta.warnings ?? [],
-    warningsTruncated: meta.warnings_truncated ?? false,
-    gapCount: meta.gap_count ?? 0,
-    gaps: meta.gaps ?? [],
-    gapsTruncated: meta.gaps_truncated ?? false,
-    historyVerified: meta.history_verified ?? true,
-    proceeds: Number(meta.proceeds_gbp ?? 0),
-    costs: Number(meta.costs_gbp ?? 0),
-    netGain: Number(meta.net_gain_gbp ?? 0),
-    disposals: Number(meta.disposals ?? 0),
+    warnings: meta.warnings ?? EMPTY,
+    gaps: meta.gaps ?? EMPTY,
+    proceeds: meta.proceeds_gbp ?? 0,
+    costs: meta.costs_gbp ?? 0,
+    netGain: meta.net_gain_gbp ?? 0,
+    disposals: meta.disposals ?? 0,
   };
 }
 

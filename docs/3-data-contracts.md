@@ -16,16 +16,12 @@ Only rows with `DataDiscriminator == "Order"` become trades (SubTotal / Total / 
 | Date/Time | Execution timestamp | `%Y-%m-%d, %H:%M:%S`, fallback date-only; else skip row + warn |
 | Quantity | Units traded | Decimal (strip `,`); > 0 Buy, < 0 Sell; zero or invalid → skip + warn |
 | T. Price | Execution price per unit | Decimal (strip `,`); invalid → skip + warn |
-| C. Price | Closing / settlement price | Decimal (strip `,`); invalid → skip + warn |
 | Proceeds | Net cash from trade | Decimal (strip `,`); invalid → skip + warn |
 | Comm/Fee | Commission and fees, signed (negative = cost, positive = rebate) | Decimal (strip `,`); invalid → skip + warn |
-| Basis | Cost basis of the position | Decimal (strip `,`); invalid → skip + warn |
-| Realized P/L | Realized profit / loss | Decimal (strip `,`); invalid → skip + warn |
-| Realized P/L % | Realized P/L as a percentage | Decimal (strip `,`); invalid → skip + warn |
-| MTM P/L | Mark-to-market P/L | Decimal (strip `,`); invalid → skip + warn |
 | Code | Semicolon-separated trade flags | blank → `""` (keep row) |
+| C. Price, Basis, Realized P/L, Realized P/L %, MTM P/L | IBKR's own P&L fields | required in the header (format check), not parsed |
 
-Supported currencies (12): AUD CAD CHF DKK EUR GBP HKD JPY NOK PLN SEK USD
+Supported currencies: GBP plus the 11 ECB-quoted currencies listed in [4-cgt-engine.md](4-cgt-engine.md#fx-conversion).
 Supported asset categories (1): Stocks
 Skip + warn messages are aggregated per reason (one warning with a count, not one per row); row-specific detail only for data-quality skips (bad date, invalid number, blank symbol).
 
@@ -33,7 +29,7 @@ Skip + warn messages are aggregated per reason (one warning with a count, not on
 
 **Financial Instrument Information section** (optional) — `Header` + `Data` rows for supported categories. Columns: `Asset Category, Symbol` (may hold several comma-separated symbols), `Description, Conid, Security ID`. Supplies description, ISIN (falling back to Conid) and domicile (from the ISIN country prefix).
 
-**Multiple statements** — the expected upload is a single IBKR export covering the full history, but a file holding several statements back-to-back (e.g. concatenated yearly exports) must parse identically. Split the file into statements on its `Statement,Header` rows, parse each separately (capturing the Statement section's `Period` and `WhenGenerated`), then merge the statements:
+**Multiple statements** — the expected upload is a single IBKR export covering the full history, but a file holding several statements back-to-back (e.g. concatenated yearly exports) must parse identically. Split the file into statements on its `Statement,Header` rows, parse each separately (capturing the Statement section's `Period` and `WhenGenerated` as a timestamp), then merge the statements:
 - A reissued statement for the same `Period` supersedes the older one wholesale (newest `WhenGenerated` wins) + warn — amended trades never double-count.
 - Trades identical across the remaining statements (same symbol, currency, timestamp, quantity, price, proceeds, commission, code) collapse to the **maximum per-statement count** — partial overlaps never double-count, while genuinely identical same-second fills within one statement survive. Warn when duplicates were collapsed. Merged trades are independent copies (the engine may track per-lot state by object).
 - Open Positions come from the statement with the latest trade date that has the section (each statement snapshots its own holdings — only the latest is current).
@@ -55,7 +51,7 @@ Filename: `TaxBuddy_CGT_2024-25.xlsx` when `period_label` matches `\d{4}/\d{2}` 
 
 ## API
 **POST /calculate** (multipart): `file` (one .csv — the full history), `start_date`, `end_date` (ISO, `start <= end` — the disposal filter is inclusive, so a one-day range is valid), `period_label?`.
-→ `200` xlsx stream with headers: `Content-Disposition` (filename) and `X-TaxBuddy-Meta` — one bounded JSON object: `{warning_count, warnings (first 30), warnings_truncated, gap_count, gaps (first 30, each {symbol, pool_qty, open_qty, gap, first_trade_is_sell}; open_qty/gap null when there was no Open Positions section to compare against), gaps_truncated, history_verified}`. Full lists always live in the workbook. CORS must expose exactly `X-TaxBuddy-Meta` and `Content-Disposition`. The heavy pipeline runs off the event loop (thread pool).
+→ `200` xlsx stream with headers: `Content-Disposition` (filename) and `X-TaxBuddy-Meta` — one bounded JSON object: `{warnings: {items (first 30), count, truncated}, gaps: {items (first 30, each {symbol, pool_qty, open_qty, gap, first_trade_is_sell}; open_qty/gap null when there was no Open Positions section), count, truncated}, proceeds_gbp, costs_gbp, net_gain_gbp, disposals}`. Full lists always live in the workbook. CORS must expose exactly `X-TaxBuddy-Meta` and `Content-Disposition`. The pipeline runs off the event loop (thread pool).
 
 **GET /health** → `{status:"ok", …fx health}` (or `{status:"ok", fx_rates_loaded:false}`).
 
