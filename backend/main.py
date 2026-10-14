@@ -147,4 +147,5 @@ if DIST.is_dir():
         target = (DIST / path).resolve() if path else DIST
         if not (target.is_relative_to(DIST) and target.is_file()):
             target = DIST / "index.html"
-        return FileResponse(target)
+        cache = "public, max-age=31536000, immutable" if "assets" in target.parts else "no-cache"
+        return FileResponse(target, headers={"Cache-Control": cache})
