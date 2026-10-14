@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("taxbuddy")
 
 MAX_FILE_BYTES = 20 * 1024 * 1024
-MAX_FILES = 10
 META_LIST_CAP = 30
 fx_table = FxTable()
 DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
@@ -70,9 +69,9 @@ async def _read_csv(upload: UploadFile) -> bytes:
     return raw
 
 
-def _pipeline(payloads: list[tuple[bytes, str]], start: date, end: date,
+def _pipeline(raw: bytes, filename: str, start: date, end: date,
               period_label: str | None) -> tuple[bytes, str, dict]:
-    merged = parser.merge([parser.parse(raw, name) for raw, name in payloads])
+    merged = parser.parse(raw, filename)
     result = engine.run(merged.trades, fx_table, merged.instruments)
     gaps = engine.validate_history(result.net_quantities, result.first_trade_is_sell,
                                    merged.open_positions, merged.has_open_positions_section,
@@ -95,23 +94,22 @@ def _pipeline(payloads: list[tuple[bytes, str]], start: date, end: date,
         "gaps_truncated": len(gaps) > META_LIST_CAP,
         "history_verified": merged.has_open_positions_section,
     }
-    log.info("calculate: %d file(s), %d trades, %d disposal lots, %d warnings, %d gaps",
-             len(payloads), len(merged.trades), len(disposals), len(warnings), len(gaps))
+    log.info("calculate: %d trades, %d disposal lots, %d warnings, %d gaps",
+             len(merged.trades), len(disposals), len(warnings), len(gaps))
     return workbook, excel.build_filename(period_label, start, end), meta
 
 
 @app.post("/calculate")
 async def calculate(
-    files: list[UploadFile] = File(...),
+    file: UploadFile = File(...),
     start_date: str = Form(...),
     end_date: str = Form(...),
     period_label: str = Form(None),
 ):
     start, end = _parse_dates(start_date, end_date)
-    if len(files) > MAX_FILES:
-        raise ApiError("TOO_MANY_FILES", f"At most {MAX_FILES} files per upload.")
-    payloads = [(await _read_csv(f), f.filename or "") for f in files]
-    workbook, filename, meta = await run_in_threadpool(_pipeline, payloads, start, end, period_label)
+    raw = await _read_csv(file)
+    workbook, filename, meta = await run_in_threadpool(
+        _pipeline, raw, file.filename or "", start, end, period_label)
     return Response(
         content=workbook,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

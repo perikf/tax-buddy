@@ -29,11 +29,10 @@ def setup_module():
         fx_table.load()
 
 
-def _post(uploads, **form):
-    payload = [("files", (name, content, "text/csv")) for name, content in uploads]
+def _post(name, content, **form):
     data = {"start_date": "2024-04-06", "end_date": "2025-04-05", "period_label": "2024/25"}
     data.update(form)
-    return client.post("/calculate", files=payload, data=data)
+    return client.post("/calculate", files={"file": (name, content, "text/csv")}, data=data)
 
 
 def meta(resp):
@@ -46,7 +45,7 @@ def test_health():
 
 
 def test_calculate_fixture_end_to_end():
-    r = _post([("2024.csv", FIXTURE)])
+    r = _post("2024.csv", FIXTURE)
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="TaxBuddy_CGT_2024-25.xlsx"'
     m = meta(r)
@@ -57,20 +56,18 @@ def test_calculate_fixture_end_to_end():
 
 
 def test_unsafe_period_label_falls_back_to_dates():
-    r = _post([("a.csv", FIXTURE)], period_label='24/25€"')
+    r = _post("a.csv", FIXTURE, period_label='24/25€"')
     assert r.status_code == 200
     assert "2024-04-06_to_2025-04-05" in r.headers["content-disposition"]
 
 
 def test_error_responses():
-    r = _post([("a.csv", FIXTURE)], start_date="2025-01-01", end_date="2024-01-01")
+    r = _post("a.csv", FIXTURE, start_date="2025-01-01", end_date="2024-01-01")
     assert (r.status_code, r.json()["error"]) == (400, "INVALID_DATES")
-    r = _post([("x.txt", b"hi")])
+    r = _post("x.txt", b"hi")
     assert (r.status_code, r.json()["error"]) == (400, "INVALID_FILE_TYPE")
-    r = _post([("x.csv", b"name,age\nbob,3\n")])
+    r = _post("x.csv", b"name,age\nbob,3\n")
     assert (r.status_code, r.json()["error"]) == (400, "NOT_IBKR_FORMAT")
-    r = _post([(f"{i}.csv", FIXTURE) for i in range(11)])
-    assert (r.status_code, r.json()["error"]) == (400, "TOO_MANY_FILES")
 
 
 def test_spa_never_serves_outside_dist():
@@ -82,10 +79,9 @@ def test_spa_never_serves_outside_dist():
 
 @pytest.mark.skipif(not (DATA / "U14562116_2024_2024.csv").exists(),
                     reason="local real statements not present")
-def test_calculate_real_statements():
-    uploads = [(f.name, f.read_bytes())
-               for f in (DATA / "U14562116_2024_2024.csv", DATA / "U14562116_2025_2025.csv")]
-    r = _post(uploads)
+def test_calculate_real_statements_combined_into_one_file():
+    combined = (DATA / "U14562116_2024_2024.csv").read_bytes() + (DATA / "U14562116_2025_2025.csv").read_bytes()
+    r = _post("full_history.csv", combined)
     assert r.status_code == 200
     m = meta(r)
     assert m["gap_count"] == 0 and m["warning_count"] >= 2

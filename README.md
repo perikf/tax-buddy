@@ -14,8 +14,8 @@ See [docs](docs/) for the full specification.
 
 Starts the FastAPI backend on `:8000` and the Vite dev server on `:5173` (first run creates
 `.venv` and installs dependencies — needs Python 3.12+ and Node 20+). Open http://localhost:5173,
-drop in your IBKR activity statement CSVs (one per year, all years since your first purchase),
-pick a tax year, download the report.
+drop in one IBKR activity statement CSV covering your full history (join yearly exports
+end-to-end into one file), pick a tax year, download the report.
 
 ## Test
 
