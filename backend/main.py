@@ -2,7 +2,7 @@
 import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from backend import engine, excel, parser
-from backend.fx import FxTable
+from backend.fx import MAX_STEP_BACK_DAYS, FxTable
 from backend.models import ApiError
 
 logging.basicConfig(level=logging.INFO)
@@ -24,12 +24,15 @@ DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
 
 
 def ensure_fx() -> None:
-    if fx_table.loaded:
+    """Load the shipped cache once; fetch only when it is staler than the engine's
+    step-back window (self-heal — the daily refresh workflow keeps it fresh)."""
+    if not fx_table.loaded:
+        try:
+            fx_table.load()
+        except OSError as e:
+            log.error("FX cache missing — fetching full history: %s", e)
+    if fx_table.latest and date.today() - fx_table.latest <= timedelta(days=MAX_STEP_BACK_DAYS):
         return
-    try:
-        fx_table.load()
-    except OSError as e:
-        log.error("FX cache missing — fetching full history: %s", e)
     try:
         fx_table.top_up()
     except Exception as e:

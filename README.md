@@ -44,5 +44,7 @@ The backend serves the built frontend from `frontend/dist` on the same port.
 
 ## Maintenance
 
-`backend/data/fx_rates.csv` ships with GBP/ECB rates from April 2015; startup fetches any
-newer days in memory. Refresh the shipped file with `.venv/bin/python backend/scripts/fx_rates.py`.
+`backend/data/fx_rates.csv` ships with GBP/ECB rates from April 2015 and is topped up each
+weekday by the `FX refresh` GitHub Actions workflow (manual run: Actions tab, or
+`.venv/bin/python backend/scripts/fx_rates.py`). The app only fetches rates itself if the
+shipped cache is more than a week stale.

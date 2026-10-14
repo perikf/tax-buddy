@@ -87,3 +87,14 @@ def test_calculate_real_statements_combined_into_one_file():
     assert m["gap_count"] == 0 and m["warning_count"] >= 2
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     assert {"CGT Summary", "1 STOCKS", "Pool History", "FX Detail"} <= set(wb.sheetnames)
+
+
+def test_ensure_fx_skips_fetch_when_cache_fresh(monkeypatch):
+    import backend.main as main
+
+    def boom():
+        raise AssertionError("top_up must not run when the cache is fresh")
+
+    monkeypatch.setattr(fx_table, "top_up", boom)
+    assert fx_table.loaded  # loaded by setup_module; shipped cache is current
+    main.ensure_fx()
