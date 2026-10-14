@@ -16,6 +16,10 @@ export interface CalcResult {
   gaps: HistoryGap[];
   gapsTruncated: boolean;
   historyVerified: boolean;
+  proceeds: number;
+  costs: number;
+  netGain: number;
+  disposals: number;
 }
 
 export async function calculate(
@@ -49,6 +53,10 @@ export async function calculate(
     gaps: meta.gaps ?? [],
     gapsTruncated: meta.gaps_truncated ?? false,
     historyVerified: meta.history_verified ?? true,
+    proceeds: Number(meta.proceeds_gbp ?? 0),
+    costs: Number(meta.costs_gbp ?? 0),
+    netGain: Number(meta.net_gain_gbp ?? 0),
+    disposals: Number(meta.disposals ?? 0),
   };
 }
 

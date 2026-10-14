@@ -3,6 +3,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -89,6 +90,10 @@ def _pipeline(raw: bytes, filename: str, start: date, end: date,
     warnings = merged.warnings + result.warnings
     disposals = engine.filter_period(result.disposals, start, end)
 
+    proceeds = sum((d.proceeds_gbp for d in disposals), Decimal(0))
+    costs = sum((d.allowable_cost_gbp for d in disposals), Decimal(0))
+    n_disposals = len({(d.symbol, d.disposal_date) for d in disposals})
+
     label = period_label or f"{start.isoformat()} to {end.isoformat()}"
     workbook = excel.generate_excel(disposals, result.pool_events, result.fx_records,
                                     gaps, label, start, end, warnings)
@@ -103,6 +108,10 @@ def _pipeline(raw: bytes, filename: str, start: date, end: date,
                   "first_trade_is_sell": g.first_trade_is_sell} for g in gaps[:META_LIST_CAP]],
         "gaps_truncated": len(gaps) > META_LIST_CAP,
         "history_verified": merged.has_open_positions_section,
+        "proceeds_gbp": str(proceeds),
+        "costs_gbp": str(costs),
+        "net_gain_gbp": str(proceeds - costs),
+        "disposals": n_disposals,
     }
     log.info("calculate: %d trades, %d disposal lots, %d warnings, %d gaps",
              len(merged.trades), len(disposals), len(warnings), len(gaps))
