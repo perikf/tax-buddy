@@ -26,7 +26,7 @@ const badge =
   "mr-2.5 inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-b from-white to-neutral-300 " +
   "text-xs font-bold text-black ring-1 ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_2px_8px_rgba(0,0,0,0.6)] align-[2px]";
 const input =
-  "rounded-lg bg-white/[0.05] ring-1 ring-white/10 px-3 py-2 text-neutral-200 outline-none transition focus:ring-[#0070f3]";
+  "h-10 rounded-lg bg-white/[0.05] ring-1 ring-white/10 px-3 text-neutral-200 outline-none transition focus:ring-[#0070f3]";
 const primaryBtn = {
   amber: "rounded-lg bg-gradient-to-b from-amber-300 to-amber-500 px-4 py-2 font-semibold text-amber-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_16px_rgba(0,0,0,0.4)] transition hover:brightness-105",
   emerald: "rounded-lg bg-gradient-to-b from-emerald-300 to-emerald-500 px-4 py-2 font-semibold text-emerald-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_16px_rgba(0,0,0,0.4)] transition hover:brightness-105",
@@ -182,21 +182,23 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {mode === "tax-year" ? (
-              <select value={year} onChange={(e) => setYear(e.target.value)} className={`max-w-full ${input}`}>
-                {years.map((y) => (
-                  <option key={y.label} value={y.label} className="bg-[#111114]">
-                    {y.label} &nbsp;·&nbsp; {y.start} → {y.end}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className={input} />
-                <span className="text-neutral-500">to</span>
-                <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className={input} />
-              </div>
-            )}
+            <div className="min-h-10">
+              {mode === "tax-year" ? (
+                <select value={year} onChange={(e) => setYear(e.target.value)} className={`max-w-full ${input}`}>
+                  {years.map((y) => (
+                    <option key={y.label} value={y.label} className="bg-[#111114]">
+                      {y.label} &nbsp;·&nbsp; {y.start} → {y.end}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className={input} />
+                  <span className="text-neutral-500">to</span>
+                  <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className={input} />
+                </div>
+              )}
+            </div>
           </section>
 
           {/* Step 3 — go */}
