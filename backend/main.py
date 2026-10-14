@@ -29,8 +29,7 @@ def ensure_fx() -> None:
     try:
         fx_table.load()
     except OSError as e:
-        log.error("FX cache missing: %s", e)
-        return
+        log.error("FX cache missing — fetching full history: %s", e)
     try:
         fx_table.top_up()
     except Exception as e:
