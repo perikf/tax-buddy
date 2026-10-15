@@ -85,8 +85,8 @@ export default function App() {
             <p className="text-sm text-neutral-400 mb-4">
               <strong className="text-neutral-300">Every year since your first purchase</strong> — HMRC matching
               needs your full history, and IBKR exports at most 365 days per statement. In Client Portal:
-              Performance &amp; Reports → Statements → Activity → period <em>Annual</em> for each past year
-              and <em>Year to Date</em> for the current one → format CSV. Drop all the files here together; order
+              Performance &amp; Reports → Statements → Activity Statement → period <em>Annual</em> for each past
+              year and <em>Year to Date</em> for the current one → <em>Download CSV</em>. Drop all the files here together; order
               doesn't matter and overlaps are handled.
             </p>
             <div
