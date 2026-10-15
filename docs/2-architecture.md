@@ -10,10 +10,10 @@
 
 ## Workflow
 ```
-upload .csv (POST /calculate)
+upload yearly .csv files (POST /calculate)
   → validate dates 
   → check .csv 
-  → parse .csv
+  → parse each file into statements, merge
   → convert trades to GBP (skip + warn if no rate)
   → run engine (same-day → B&B → S104 → short)
   → validate history (pool vs open positions)

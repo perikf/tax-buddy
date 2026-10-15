@@ -16,7 +16,8 @@ from backend.models import ApiError
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("taxbuddy")
 
-MAX_FILE_BYTES = int(4.5 * 1024 * 1024)
+MAX_UPLOAD_BYTES = int(4.5 * 1024 * 1024)   # all files together
+MAX_FILES = 25
 META_LIST_CAP = 30
 fx_table = FxTable()
 DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
@@ -43,25 +44,32 @@ def _parse_dates(start_date: str, end_date: str) -> tuple[date, date]:
     return start, end
 
 
-async def _read_csv(upload: UploadFile) -> bytes:
-    if not (upload.filename or "").lower().endswith(".csv"):
-        raise ApiError("INVALID_FILE_TYPE", f"'{upload.filename}' is not a .csv file.")
-    raw = await upload.read(MAX_FILE_BYTES + 1)
-    if len(raw) > MAX_FILE_BYTES:
-        raise ApiError("FILE_TOO_LARGE", f"'{upload.filename}' exceeds 4.5 MB.")
-    if not raw:
-        raise ApiError("INVALID_FILE_TYPE", f"'{upload.filename}' is empty.")
-    return raw
+async def _read_csvs(uploads: list[UploadFile]) -> list[tuple[bytes, str]]:
+    if len(uploads) > MAX_FILES:
+        raise ApiError("TOO_MANY_FILES", f"At most {MAX_FILES} files per upload.")
+    payloads, total = [], 0
+    for upload in uploads:
+        name = upload.filename or ""
+        if not name.lower().endswith(".csv"):
+            raise ApiError("INVALID_FILE_TYPE", f"'{name}' is not a .csv file.")
+        raw = await upload.read(MAX_UPLOAD_BYTES + 1)
+        total += len(raw)
+        if total > MAX_UPLOAD_BYTES:
+            raise ApiError("FILE_TOO_LARGE", "Uploaded files exceed 4.5 MB in total.")
+        if not raw:
+            raise ApiError("INVALID_FILE_TYPE", f"'{name}' is empty.")
+        payloads.append((raw, name))
+    return payloads
 
 
 def _capped(items: list) -> dict:
     return {"items": items[:META_LIST_CAP], "count": len(items), "truncated": len(items) > META_LIST_CAP}
 
 
-def _pipeline(raw: bytes, filename: str, start: date, end: date,
+def _pipeline(payloads: list[tuple[bytes, str]], start: date, end: date,
               period_label: str | None) -> tuple[bytes, str, dict]:
     fx_table.ensure_ready()
-    parsed = parser.parse(raw, filename)
+    parsed = parser.merge([s for raw, name in payloads for s in parser.statements(raw, name)])
     result = engine.run(parsed.trades, fx_table, parsed.instruments)
     gaps = engine.validate_history(result, parsed)
     warnings = parsed.warnings + result.warnings
@@ -81,22 +89,21 @@ def _pipeline(raw: bytes, filename: str, start: date, end: date,
         "net_gain_gbp": float(totals.net),
         "disposals": totals.n_disposals,
     }
-    log.info("calculate: %d trades, %d disposal lots, %d warnings, %d gaps",
-             len(parsed.trades), len(disposals), len(warnings), len(gaps))
+    log.info("calculate: %d file(s), %d trades, %d disposal lots, %d warnings, %d gaps",
+             len(payloads), len(parsed.trades), len(disposals), len(warnings), len(gaps))
     return workbook, excel.build_filename(period_label, start, end), meta
 
 
 @app.post("/calculate")
 async def calculate(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     start_date: str = Form(...),
     end_date: str = Form(...),
     period_label: str = Form(None),
 ):
     start, end = _parse_dates(start_date, end_date)
-    raw = await _read_csv(file)
-    workbook, filename, meta = await run_in_threadpool(
-        _pipeline, raw, file.filename or "", start, end, period_label)
+    payloads = await _read_csvs(files)
+    workbook, filename, meta = await run_in_threadpool(_pipeline, payloads, start, end, period_label)
     return Response(
         content=workbook,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

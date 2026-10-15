@@ -1,5 +1,6 @@
-"""IBKR tagged-row CSV -> ParseResult. A file may hold several statements
-back-to-back; each is parsed separately and merged. Raises ApiError on
+"""IBKR tagged-row CSV -> statements -> merged ParseResult. IBKR exports at most a
+year per statement, so a full history arrives as several files (each may also hold
+several statements back-to-back); merge() combines them all. Raises ApiError on
 structural problems."""
 import csv
 import dataclasses
@@ -72,6 +73,11 @@ def _col(row: list[str], header: dict[str, int], name: str) -> str:
 
 
 def parse(raw: bytes, filename: str = "") -> ParseResult:
+    return merge(statements(raw, filename))
+
+
+def statements(raw: bytes, filename: str = "") -> list[ParseResult]:
+    """Every statement in one file, parsed separately."""
     text = _decode(raw)
     rows = [r for r in csv.reader(io.StringIO(text), delimiter=_separator(text))
             if len(r) >= 2 and r[0].strip() and r[1].strip()]
@@ -88,7 +94,7 @@ def parse(raw: bytes, filename: str = "") -> ParseResult:
     bounds = starts or [0]
     chunks = [rows[s:e] for s, e in zip(bounds, bounds[1:] + [len(rows)])]
     tag = f" [{filename}]" if filename else ""
-    return merge([_parse_statement(chunk, tag) for chunk in chunks])
+    return [_parse_statement(chunk, tag) for chunk in chunks]
 
 
 def _parse_statement(rows: list[list[str]], tag: str) -> ParseResult:
@@ -237,9 +243,9 @@ def _drop_superseded(results: list[ParseResult], warnings: list[str]) -> list[Pa
 
 
 def merge(results: list[ParseResult]) -> ParseResult:
-    """Merge the statements of one file. Trades identical across statements collapse to
-    the max per-statement count; kept trades are independent copies; Open Positions come
-    from the statement with the latest trade date."""
+    """Merge statements from any number of files, in any order. Trades identical across
+    statements collapse to the max per-statement count; kept trades are independent
+    copies; Open Positions come from the statement with the latest trade date."""
     if len(results) == 1:
         return results[0]
 

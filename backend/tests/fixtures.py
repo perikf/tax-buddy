@@ -38,3 +38,14 @@ FULL_STATEMENT = csv_bytes(
     FII_HDR, fii_row(),
     period="January 1, 2024 - December 31, 2024", generated="2025-01-10, 08:00:00",
 )
+
+STATEMENT_2024 = csv_bytes(
+    HDR, row(qty="100", price="100", dt="2024-05-01, 10:00:00"),
+    OPEN_HDR, open_row(qty="100"), FII_HDR, fii_row(),
+    period="January 1, 2024 - December 31, 2024", generated="2025-01-10, 08:00:00",
+)
+STATEMENT_2025 = csv_bytes(
+    HDR, row(qty="-40", price="120", dt="2025-02-01, 10:00:00"),
+    OPEN_HDR, open_row(qty="60"), FII_HDR, fii_row(),
+    period="January 1, 2025 - December 31, 2025", generated="2026-01-10, 08:00:00",
+)

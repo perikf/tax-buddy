@@ -5,7 +5,7 @@ import { Card, Stat, badge, ghostBtn, input, panel, primaryBtn } from "./ui";
 
 export default function App() {
   const years = useMemo(taxYears, []);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<"tax-year" | "custom">("tax-year");
   const [year, setYear] = useState(years[1].label);
   const [customStart, setCustomStart] = useState("");
@@ -16,10 +16,10 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function pickFile(list: FileList | null) {
-    const picked = list?.[0];
-    if (!picked?.name.toLowerCase().endsWith(".csv")) return;
-    setFile(picked);
+  function pickFiles(list: FileList | null) {
+    const picked = Array.from(list ?? []).filter((f) => f.name.toLowerCase().endsWith(".csv"));
+    if (picked.length === 0) return;
+    setFiles((prev) => [...prev, ...picked.filter((f) => !prev.some((p) => p.name === f.name && p.size === f.size))]);
     setResult(null);
     setError("");
   }
@@ -32,14 +32,14 @@ export default function App() {
     return { start: customStart, end: customEnd, label: "" };
   }, [mode, year, customStart, customEnd, years]);
 
-  const ready = file !== null && period.start !== "" && period.end !== "" && period.start <= period.end;
+  const ready = files.length > 0 && period.start !== "" && period.end !== "" && period.start <= period.end;
 
   async function submit() {
     setBusy(true);
     setError("");
     setResult(null);
     try {
-      setResult(await calculate(file!, period.start, period.end, period.label));
+      setResult(await calculate(files, period.start, period.end, period.label));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -48,7 +48,7 @@ export default function App() {
   }
 
   function reset() {
-    setFile(null);
+    setFiles([]);
     setResult(null);
     setError("");
   }
@@ -80,19 +80,20 @@ export default function App() {
         <main className="space-y-6">
           <Card delay={80}>
             <h2 className="font-semibold tracking-tight text-white mb-1">
-              <span className={badge}>1</span>Upload your IBKR activity statement
+              <span className={badge}>1</span>Upload your IBKR activity statements
             </h2>
             <p className="text-sm text-neutral-400 mb-4">
-              One CSV <strong className="text-neutral-300">covering every year since your first purchase</strong> —
-              HMRC matching needs your full history. Export it directly from IBKR as a single file:
-              Performance &amp; Reports → Statements → Activity, date range from your first trade to today,
-              format CSV. No need to merge files by hand.
+              <strong className="text-neutral-300">Every year since your first purchase</strong> — HMRC matching
+              needs your full history, and IBKR exports at most 365 days per statement. In Client Portal:
+              Performance &amp; Reports → Statements → Activity → period <em>Annual</em> for each past year
+              (<em>Custom</em> for the current one) → format CSV. Drop all the files here together; order
+              doesn't matter and overlaps are handled.
             </p>
             <div
               onClick={() => inputRef.current?.click()}
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); pickFile(e.dataTransfer.files); }}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); pickFiles(e.dataTransfer.files); }}
               className={`group cursor-pointer rounded-xl border border-dashed p-8 text-center transition
                 ${dragging
                   ? "border-[#0070f3] bg-[#0070f3]/10 shadow-[0_0_50px_rgba(0,112,243,0.2)_inset]"
@@ -103,25 +104,30 @@ export default function App() {
                               [animation:float-y_4s_ease-in-out_infinite] group-hover:ring-[#00dfd8]/40">
                 📂
               </div>
-              <p className="font-medium text-neutral-200">Drop your CSV here or click to browse</p>
+              <p className="font-medium text-neutral-200">Drop your CSV files here or click to browse</p>
               <p className="text-sm text-neutral-500 mt-1">
-                Activity Statement → CSV · one file with your full history · 4.5 MB max
+                Activity Statement → CSV · one per year · 4.5 MB in total
               </p>
               <input
-                ref={inputRef} type="file" accept=".csv" hidden
-                onChange={(e) => { pickFile(e.target.files); e.target.value = ""; }}
+                ref={inputRef} type="file" accept=".csv" multiple hidden
+                onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }}
               />
             </div>
-            {file && (
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1 text-sm text-neutral-300 ring-1 ring-white/[0.12] animate-fade-up">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#00dfd8]" />
-                <span>{file.name}</span>
-                <span className="text-neutral-500">{(file.size / 1024).toFixed(0)} KB</span>
-                <button onClick={() => setFile(null)}
-                  className="font-bold text-neutral-500 transition hover:text-white" aria-label={`Remove ${file.name}`}>
-                  ×
-                </button>
-              </div>
+            {files.length > 0 && (
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {files.map((f) => (
+                  <li key={f.name + f.size}
+                      className="flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1 text-sm text-neutral-300 ring-1 ring-white/[0.12] animate-fade-up">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#00dfd8]" />
+                    <span>{f.name}</span>
+                    <span className="text-neutral-500">{(f.size / 1024).toFixed(0)} KB</span>
+                    <button onClick={() => setFiles((prev) => prev.filter((p) => p !== f))}
+                      className="font-bold text-neutral-500 transition hover:text-white" aria-label={`Remove ${f.name}`}>
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </Card>
 
@@ -230,7 +236,7 @@ export default function App() {
                   Download anyway
                 </button>
                 <button onClick={reset} className={ghostBtn.amber}>
-                  Upload a fuller history
+                  Add missing years
                 </button>
               </div>
             </section>

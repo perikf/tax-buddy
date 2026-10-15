@@ -26,13 +26,13 @@ export interface CalcResult {
 const EMPTY = { items: [], count: 0, truncated: false };
 
 export async function calculate(
-  file: File,
+  files: File[],
   startDate: string,
   endDate: string,
   periodLabel: string
 ): Promise<CalcResult> {
   const form = new FormData();
-  form.append("file", file);
+  files.forEach((f) => form.append("files", f));
   form.append("start_date", startDate);
   form.append("end_date", endDate);
   if (periodLabel) form.append("period_label", periodLabel);

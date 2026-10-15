@@ -1,0 +1,7 @@
+README.md
+pyproject.toml
+tax_buddy.egg-info/PKG-INFO
+tax_buddy.egg-info/SOURCES.txt
+tax_buddy.egg-info/dependency_links.txt
+tax_buddy.egg-info/requires.txt
+tax_buddy.egg-info/top_level.txt
