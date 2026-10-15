@@ -88,3 +88,9 @@ def test_reissued_statement_supersedes_same_period():
     r = parse(original + amended)
     assert [t.price for t in r.trades] == [Decimal(101)]
     assert any("newest issue" in w for w in r.warnings)
+
+
+def test_when_generated_with_timezone_suffix():
+    r = parse(csv_bytes(HDR, row(), period="January 1, 2026 - October 14, 2026",
+                        generated="2026-10-15, 01:59:40 EDT"))
+    assert r.when_generated is not None and r.when_generated.hour == 1

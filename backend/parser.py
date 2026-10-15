@@ -5,6 +5,7 @@ structural problems."""
 import csv
 import dataclasses
 import io
+import re
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -50,9 +51,10 @@ def _dec(value: str) -> Decimal:
 
 
 def _parse_dt(value: str) -> datetime:
+    value = re.sub(r"\s+[A-Z]{2,5}$", "", value.strip())   # drop a trailing timezone token (EDT, BST…)
     for fmt in ("%Y-%m-%d, %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(value.strip(), fmt)
+            return datetime.strptime(value, fmt)
         except ValueError:
             continue
     raise ValueError(value)
