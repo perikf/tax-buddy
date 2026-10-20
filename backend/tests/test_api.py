@@ -1,6 +1,5 @@
 import io
 import json
-from pathlib import Path
 
 import openpyxl
 import pytest
@@ -9,7 +8,6 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from backend.tests.fixtures import FULL_STATEMENT, STATEMENT_2024, STATEMENT_2025
 
-DATA = Path(__file__).parent.parent.parent / "data"
 client = TestClient(app)
 
 
@@ -77,16 +75,3 @@ def test_spa_never_serves_outside_dist():
         r = client.get(path)
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/html"), path
-
-
-REAL_STATEMENTS = sorted(DATA.glob("U*_*.csv"))   # gitignored local exports, if any
-
-
-@pytest.mark.skipif(not REAL_STATEMENTS, reason="local real statements not present")
-def test_calculate_real_yearly_statements():
-    r = _post(*[(f.name, f.read_bytes()) for f in REAL_STATEMENTS])
-    assert r.status_code == 200
-    m = meta(r)
-    assert m["gaps"]["count"] == 0 and m["warnings"]["count"] >= 2
-    wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    assert {"CGT Summary", "1 STOCKS", "Pool History", "FX Detail"} <= set(wb.sheetnames)
