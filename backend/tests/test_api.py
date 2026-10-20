@@ -79,11 +79,12 @@ def test_spa_never_serves_outside_dist():
         assert r.headers["content-type"].startswith("text/html"), path
 
 
-@pytest.mark.skipif(not (DATA / "U14562116_2024_2024.csv").exists(),
-                    reason="local real statements not present")
+REAL_STATEMENTS = sorted(DATA.glob("U*_*.csv"))   # gitignored local exports, if any
+
+
+@pytest.mark.skipif(not REAL_STATEMENTS, reason="local real statements not present")
 def test_calculate_real_yearly_statements():
-    r = _post(*[(f.name, f.read_bytes()) for f in
-                (DATA / "U14562116_2024_2024.csv", DATA / "U14562116_2025_2025.csv")])
+    r = _post(*[(f.name, f.read_bytes()) for f in REAL_STATEMENTS])
     assert r.status_code == 200
     m = meta(r)
     assert m["gaps"]["count"] == 0 and m["warnings"]["count"] >= 2
