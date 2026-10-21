@@ -106,6 +106,7 @@ def _parse_statement(rows: list[list[str]], tag: str) -> ParseResult:
     saw_full_header = False
     missing_columns: list[str] = []
     skips = Counter()
+    corporate_actions = 0
 
     for row in rows:
         section, rowtype, payload = row[0].strip(), row[1].strip(), row[2:]
@@ -136,6 +137,9 @@ def _parse_statement(rows: list[list[str]], tag: str) -> ParseResult:
                 except ValueError:
                     pass
 
+        elif section == "Corporate Actions" and rowtype == "Data":
+            corporate_actions += 1
+
         elif section in ("Open Positions", "Financial Instrument Information"):
             if rowtype == "Header":
                 section_header = _header_map(payload)
@@ -151,6 +155,10 @@ def _parse_statement(rows: list[list[str]], tag: str) -> ParseResult:
         raise ApiError("MISSING_REQUIRED_COLUMNS",
                        f"Trades section missing columns: {', '.join(missing_columns)}")
     result.warnings.extend(f"Skipped {n} trade(s){tag}: {reason}." for reason, n in sorted(skips.items()))
+    if corporate_actions:
+        result.warnings.append(
+            f"{corporate_actions} corporate action row(s){tag} (splits, mergers, spin-offs) not applied — "
+            f"affected holdings will show as history gaps.")
     if not result.trades:
         raise ApiError("EMPTY_TRADES", "Trades section has no Order rows.")
     return result

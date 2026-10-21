@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { gbp } from "./period";
 
-export const card =
+const card =
   "spotlight-card relative overflow-hidden rounded-2xl bg-white/[0.03] ring-1 ring-white/10 p-6 backdrop-blur-sm transition " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.4),0_16px_48px_rgba(0,0,0,0.5)] " +
   "hover:ring-white/[0.14]";

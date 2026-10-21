@@ -88,7 +88,7 @@ The short pool is the same structure with cost meaning proceeds (add on short-op
 | Weekend/holiday | step **back** up to 7 calendar days; first hit wins; record the actual rate date |
 | No rate in window | exclude the trade from all calculations + warn loudly; keep its row in FX Detail marked `NO RATE` |
 | Currencies (11) | AUD CAD CHF DKK EUR HKD JPY NOK PLN SEK USD |
-| Cache | `backend/data/fx_rates.csv` (shipped, topped up at startup), cols `date,AUD,…,USD`, from 2015-04-02 |
+| Cache | `backend/data/fx_rates.csv` (shipped; advanced by the refresh workflow), cols `date,AUD,…,USD`, from 2015-04-02 |
 
 `FxTable` loads the shipped CSV into memory and looks rates up from it. If the cache is staler than the step-back window it fetches the missing days once per process (in memory only); the shipped file itself is advanced by the refresh workflow — see [2-architecture.md](2-architecture.md).
 

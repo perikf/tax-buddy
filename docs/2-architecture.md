@@ -22,7 +22,7 @@ upload yearly .csv files (POST /calculate)
   → frontend: gaps → warning screen (continue / re-upload) : results → download
 ```
 
-## Target structure
+## Structure
 ```
 tax-buddy/
 ├── run.sh                    # dev launcher: uvicorn + Vite together

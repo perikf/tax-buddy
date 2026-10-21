@@ -1,10 +1,10 @@
 # Overview
 
 ## What
-A stateless web app that turns an IBKR CSV Activity Statement into a downloadable UK Capital Gains Tax report (Excel), applying HMRC matching rules with GBP FX conversion. No accounts, no storage.
+A stateless web app that turns IBKR CSV Activity Statements (one per year) into a downloadable UK Capital Gains Tax report (Excel), applying HMRC matching rules with GBP FX conversion. No accounts, no storage.
 
 ## Who
-UK retail investors / active traders self-filing Self Assessment, holding stocks/ETFs/options (mostly US-listed) via Interactive Brokers.
+UK retail investors / active traders self-filing Self Assessment, holding stocks/ETFs (mostly US-listed) via Interactive Brokers.
 
 ## Why
 IBKR reports gains FIFO (US rules) — non-compliant with UK law. By hand it's 4–8 hrs; an accountant is £300–800. Target: correct, auditable CGT in **under 10s**.
@@ -20,13 +20,12 @@ IBKR reports gains FIFO (US rules) — non-compliant with UK law. By hand it's 4
 - Excel: disposals per product, pool history, CGT summary (SA108), FX detail.
 
 ## Out of scope (first version)
-Dividends/income, Equity and Index Options, Futures, Options on Futures, Bonds, US Treasury Bills, crypto, CFDs/spread betting, corporate actions (skip + warn), HMRC submission, multi-broker, accounts/auth/persistence, mobile UI, PDF.
+Dividends/income, Equity and Index Options, Futures, Options on Futures, Bonds, US Treasury Bills, crypto, CFDs/spread betting, corporate actions (not applied — flagged with a warning, and affected holdings surface as history gaps), HMRC submission, multi-broker, accounts/auth/persistence, mobile UI, PDF.
 
 ## Success criteria
 | Metric | Target |
 |---|---|
 | Accuracy vs manual (test suite) | 100% |
 | p95 processing (10k rows) | < 10s |
-| Uploaders who download a result | > 90% |
 | History-warning correctness (fixtures) | 100% |
 | Unhandled exceptions | < 1% |

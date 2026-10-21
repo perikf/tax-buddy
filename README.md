@@ -46,3 +46,7 @@ npm --prefix frontend run build
 workflow tops it up each weekday and commits; run it manually from the Actions tab or with
 `.venv/bin/python backend/scripts/fx_rates.py`. The app only fetches rates itself when the shipped
 cache is more than a week stale.
+
+## License
+
+[MIT](LICENSE)

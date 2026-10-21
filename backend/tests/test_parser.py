@@ -94,3 +94,11 @@ def test_when_generated_with_timezone_suffix():
     r = parse(csv_bytes(HDR, row(), period="January 1, 2026 - October 14, 2026",
                         generated="2026-10-15, 01:59:40 EDT"))
     assert r.when_generated is not None and r.when_generated.hour == 1
+
+
+def test_corporate_actions_are_flagged_not_applied():
+    r = parse(csv_bytes(HDR, row(),
+                        "Corporate Actions,Header,Asset Category,Currency,Report Date,Date/Time,Description,Quantity",
+                        'Corporate Actions,Data,Stocks,USD,2024-06-10,"2024-06-07, 20:25:00",NVDA SPLIT 10 FOR 1,1440'))
+    assert len(r.trades) == 1
+    assert any("corporate action" in w for w in r.warnings)

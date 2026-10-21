@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from backend.fx import FxTable
+from backend.fx import MAX_STEP_BACK_DAYS, FxTable
 from backend.models import (ACQUISITION, BED_AND_BREAKFAST, DISPOSAL, SAME_DAY, SECTION_104,
                             SHORT_CLOSE, SHORT_OPEN, DisposalResult, FxRecord, HistoryGap,
                             Instrument, ParseResult, PoolEvent, Totals, Trade)
@@ -32,7 +32,7 @@ def convert_trades(trades: list[Trade], fx: FxTable, warnings: list[str]) -> tup
         orig = abs(t.quantity) * t.price
         if hit is None:
             warnings.append(
-                f"No {t.currency} rate within 7 days of {t.date} — {t.symbol} trade EXCLUDED from calculations.")
+                f"No {t.currency} rate within {MAX_STEP_BACK_DAYS} days of {t.date} — {t.symbol} trade EXCLUDED from calculations.")
             records.append(FxRecord(t.date, t.symbol, trade_type, t.currency, orig,
                                     None, None, None, "NO RATE — trade excluded"))
             continue
